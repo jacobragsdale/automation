@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Lights Scheduler Service
+After=network.target
+
+[Service]
+Type=simple
+User=<your_username>
+WorkingDirectory=/Users/jacob/Development/automation
+ExecStart=/usr/bin/python3 /Users/jacob/Development/automation/scheduler.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=append:/Users/jacob/Development/automation/scheduler_output.log
+StandardError=append:/Users/jacob/Development/automation/scheduler_error.log
+
+[Install]
+WantedBy=multi-user.target

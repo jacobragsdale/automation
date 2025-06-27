@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="4565e6e5-8d51-4078-ba92-2ef209488392" name="gnu-air">
+        <fileTransfer rootFolder="/home/jacob" accessType="SFTP" host="10.0.0.35" port="22" sshConfigId="10f01d1a-41e0-40cf-a597-b69ed5001192" sshConfig="jacob@10.0.0.35:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

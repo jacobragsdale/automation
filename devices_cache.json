@@ -1,0 +1,68 @@
+{
+  "10.0.0.57": {
+    "ip": "10.0.0.57",
+    "alias": "Lamp 3a",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.77": {
+    "ip": "10.0.0.77",
+    "alias": "Patio Light",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.108": {
+    "ip": "10.0.0.108",
+    "alias": "Lamp 1a",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.52": {
+    "ip": "10.0.0.52",
+    "alias": "Lamp 3b",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.179": {
+    "ip": "10.0.0.179",
+    "alias": "Living room lamp ",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.235": {
+    "ip": "10.0.0.235",
+    "alias": "Kitchen Light 1",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.72": {
+    "ip": "10.0.0.72",
+    "alias": "Kitchen Light 2",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.13": {
+    "ip": "10.0.0.13",
+    "alias": "Lamp 1b",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.112": {
+    "ip": "10.0.0.112",
+    "alias": "Kitchen Light 3",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.153": {
+    "ip": "10.0.0.153",
+    "alias": "Desk Lamp",
+    "model": "KL125",
+    "device_type": "bulb"
+  },
+  "10.0.0.118": {
+    "ip": "10.0.0.118",
+    "alias": "Bedroom Lamp",
+    "model": "KL125",
+    "device_type": "bulb"
+  }
+}
