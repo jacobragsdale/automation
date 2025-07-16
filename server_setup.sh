@@ -32,27 +32,4 @@ for d in /sys/class/leds/*kbd*; do
   fi
 done
 
-# 5) Install required Python packages
-echo "Installing required Python packages..."
-pip install python-kasa apscheduler sqlalchemy
-
-# 6) Set up the scheduler service
-echo "Setting up the scheduler service..."
-# Get the current username
-CURRENT_USER=$(whoami)
-
-# Update the service file with the current username
-sed -i "s/<your_username>/$CURRENT_USER/" lights-scheduler.service
-
-# Copy the service file to systemd directory
-cp lights-scheduler.service /etc/systemd/system/
-
-# Reload systemd to recognize the new service
-systemctl daemon-reload
-
-# Enable and start the service
-systemctl enable lights-scheduler.service
-systemctl start lights-scheduler.service
-
-echo "Scheduler service started. Check status with: systemctl status lights-scheduler.service"
 echo "Setup Complete"
