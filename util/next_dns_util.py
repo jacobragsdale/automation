@@ -2,6 +2,10 @@ import asyncio
 
 import httpx
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class NextDnsUtil:
@@ -13,7 +17,7 @@ class NextDnsUtil:
         return cls._instance
     
     def __init__(self):
-        self._api_key = "7da6329622de3bb3b219a31d716e43af76521bdb"
+        self._api_key = os.getenv("NEXTDNS_API_KEY")
         self._headers = {"X-Api-Key": self._api_key}
 
         # 1) Fetch the profile
