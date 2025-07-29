@@ -1,6 +1,4 @@
 import asyncio
-
-import httpx
 import requests
 import os
 from dotenv import load_dotenv
@@ -17,27 +15,48 @@ class NextDnsUtil:
         return cls._instance
     
     def __init__(self):
-        self._api_key = os.getenv("NEXTDNS_API_KEY")
-        self._headers = {"X-Api-Key": self._api_key}
+        self._headers = {"X-Api-Key": os.getenv("NEXTDNS_API_KEY")}
+        self.profile_url = None
+        self.profile_id = None
+        self.profile = None
+        self.get_profile()
 
-        # 1) Fetch the profile
-        resp = requests.get("https://api.nextdns.io/profiles", headers=self._headers)
-        resp.raise_for_status()
-        profile_id = resp.json()["data"][0]["id"]
+    def get_profile(self):
+        response = requests.get("https://api.nextdns.io/profiles", headers=self._headers).json()
+        self.profile_id = response["data"][0]["id"]
+        self.profile_url = f"https://api.nextdns.io/profiles/{self.profile_id}"
+        self.profile = requests.get(self.profile_url, headers=self._headers).json()
+        return self.profile
 
-        # 2) Get the denylist entries
-        self.deny_url = f"https://api.nextdns.io/profiles/{profile_id}/denylist"
-        resp = requests.get(self.deny_url, headers=self._headers)
-        resp.raise_for_status()
-        self.entries = resp.json()["data"]
+    def toggle_lockdown(self, active=True):
+        # Toggle parental controls
+        parental_control_payload = {
+            "safeSearch": active,
+            "categories": [
+                {"id": entry["id"], "active": active}
+                for entry in self.profile['data']['parentalControl']['categories']
+            ]
+        }
+        response = requests.patch(f"{self.profile_url}/parentalControl", headers=self._headers, json=parental_control_payload)
+        response.raise_for_status()
 
-    async def _update_deny_list_item(self, entry: dict, active: bool):
-        patch_url = f"{self.deny_url}/{entry['id']}"
-        async with httpx.AsyncClient() as client:
-            r = await client.patch(patch_url, headers=self._headers, json={"active": active})
-            r.raise_for_status()
-        print(f"Enabled {entry['id']}")
+        # toggle denylist
+        deny_list = self.profile['data']['denylist']
+        for entry in deny_list:
+            rule_payload = {"active": active}
+            rule_id = entry['id']
+            response = requests.patch(f"{self.profile_url}/denylist/{rule_id}", headers=self._headers, json=rule_payload)
+            response.raise_for_status()
 
-    async def update_deny_list(self, active: bool):
-        tasks = [self._update_deny_list_item(entry, active) for entry in self.entries]
-        await asyncio.gather(*tasks)
+    def add_to_denylist(self, domain: str):
+        request = {"id": domain, "active": True}
+        response = requests.post(f"{self.profile_url}/denylist", headers=self._headers, json=request)
+        response.raise_for_status()
+
+
+async def main():
+    NextDnsUtil().toggle_lockdown(active=False)
+
+if __name__ == "__main__":
+    util = NextDnsUtil()
+    asyncio.run(main())

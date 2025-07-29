@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from handlers import run_night_lights_handler, run_morning_lights_handler, update_deny_list_handler
+from handlers import run_night_lights_handler, run_morning_lights_handler, toggle_lockdown_handler
 from util.kasa_util import KasaUtil
 from util.next_dns_util import NextDnsUtil
 
@@ -19,9 +19,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_morning_lights_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=45)
     scheduler.add_job(run_night_lights_handler, trigger="cron", hour=20, minute=0)
 
-    scheduler.add_job(update_deny_list_handler, trigger="cron", day_of_week="mon-fri", hour=1, minute=0, args=[True])
-    scheduler.add_job(update_deny_list_handler, trigger="cron", day_of_week="mon-fri", hour=16, minute=0, args=[False])
-    scheduler.add_job(update_deny_list_handler, trigger="cron", day_of_week="mon-fri", hour=21, args=[True])
+    scheduler.add_job(toggle_lockdown, trigger="cron", day_of_week="mon-fri", hour=1, minute=0, args=[True])
+    scheduler.add_job(toggle_lockdown, trigger="cron", day_of_week="mon-fri", hour=16, minute=0, args=[False])
+    scheduler.add_job(toggle_lockdown, trigger="cron", day_of_week="mon-thu", hour=21, args=[True])
 
     scheduler.start()
     yield
@@ -43,13 +43,17 @@ async def run_morning_lights():
 async def run_night_lights():
     await run_night_lights_handler()
 
-@app.get("/update_deny_list/{active}")
-async def update_deny_list(active: bool):
-    await update_deny_list_handler(active)
+@app.get("/toggle_lockdown/{active}")
+async def toggle_lockdown(active: bool):
+    await toggle_lockdown_handler(active)
+
+@app.post("/add_to_denylist")
+async def add_to_denylist(domain: str):
+    NextDnsUtil().add_to_denylist(domain)
 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # nohup uv run app.py > uvicorn.log 2>&1 & disown
-# kill 23247
+# kill 51721

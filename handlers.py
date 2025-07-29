@@ -13,5 +13,5 @@ async def run_night_lights_handler():
         await KasaUtil().execute_light_command("color", (16, 100, 99), 100)
 
 
-async def update_deny_list_handler(active: bool):
-    await NextDnsUtil().update_deny_list(active)
+async def toggle_lockdown_handler(active: bool):
+    await NextDnsUtil().toggle_lockdown(active)
