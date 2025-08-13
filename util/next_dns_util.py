@@ -28,7 +28,7 @@ class NextDnsUtil:
         self.profile = requests.get(self.profile_url, headers=self._headers).json()
         return self.profile
 
-    def toggle_lockdown(self, active=True):
+    async def toggle_lockdown(self, active=True):
         # Toggle parental controls
         parental_control_payload = {
             "safeSearch": active,
@@ -55,7 +55,7 @@ class NextDnsUtil:
 
 
 async def main():
-    NextDnsUtil().toggle_lockdown(active=False)
+    await NextDnsUtil().toggle_lockdown(active=False)
 
 if __name__ == "__main__":
     util = NextDnsUtil()
