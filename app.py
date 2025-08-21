@@ -19,12 +19,12 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_morning_lights_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=30)
     scheduler.add_job(run_night_lights_handler, trigger="cron", hour=20, minute=0)
 
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=0, args=[False])
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=8, minute=0, args=[True])
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=11, minute=0, args=[False])
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=13, minute=0, args=[True])
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=16, minute=0, args=[False])
-    scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-thu", hour=21, args=[True])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=0, args=[False])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=8, minute=0, args=[True])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=11, minute=0, args=[False])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=13, minute=0, args=[True])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=16, minute=0, args=[False])
+    # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-thu", hour=21, args=[True])
 
     scheduler.start()
     yield

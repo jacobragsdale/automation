@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Set
 
 from kasa import Discover
-from kasa.iot import IotDevice
+from kasa.iot import IotDevice, IotBulb
 
 
 class KasaUtil:
@@ -110,4 +110,4 @@ class KasaUtil:
 
 if __name__ == "__main__":
     asyncio.run(KasaUtil().discover_devices())
-    print(asyncio.run(KasaUtil().are_lights_on()))
+    print(asyncio.run(KasaUtil().execute_light_command("on", (40, 10, 100), 100)))
