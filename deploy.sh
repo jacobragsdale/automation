@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 set -Eeuo pipefail
 
 # Configuration - Update these variables for your setup
