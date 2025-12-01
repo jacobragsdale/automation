@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # Configuration - Update these variables for your setup
-SERVER_HOST="10.0.0.35"
+SERVER_HOST="192.168.8.233"
 SERVER_USER="jacob"
 REMOTE_PROJECT_DIR="/home/jacob/automation"
 LOCAL_PROJECT_DIR="$(pwd)"
