@@ -8,6 +8,11 @@ REMOTE_PROJECT_DIR="/home/jacob/automation"
 LOCAL_PROJECT_DIR="$(pwd)"
 APP_HOST="0.0.0.0"
 APP_PORT="8000"
+SSH_OPTS=(
+  -o ControlMaster=auto
+  -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p"
+  -o ControlPersist=10m
+)
 
 # Colors for output
 RED='\033[0;31m'
@@ -17,10 +22,14 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Starting deployment...${NC}"
 
+# Prime a master connection so subsequent SSH/rsync hops reuse auth
+ssh "${SSH_OPTS[@]}" -fN "$SERVER_USER@$SERVER_HOST" 2>/dev/null || true
+
 # Function to run commands on remote server with proper environment
 # -n closes stdin; -T disables pseudo-tty, both help avoid SSH hangs
 run_remote() {
-    ssh -n -T "$SERVER_USER@$SERVER_HOST" "source ~/.bashrc 2>/dev/null || true; source ~/.profile 2>/dev/null || true; $1"
+    ssh "${SSH_OPTS[@]}" -n -T "$SERVER_USER@$SERVER_HOST" \
+      "source ~/.bashrc 2>/dev/null || true; source ~/.profile 2>/dev/null || true; $1"
 }
 
 # Step 1: Sync local files to server
@@ -31,6 +40,7 @@ rsync -avz --delete \
     --exclude '.git' \
     --exclude '.venv' \
     --exclude 'uvicorn.log' \
+    -e "ssh ${SSH_OPTS[*]}" \
     "$LOCAL_PROJECT_DIR/" "$SERVER_USER@$SERVER_HOST:$REMOTE_PROJECT_DIR/"
 
 echo -e "${GREEN}Files synced successfully${NC}"
@@ -78,6 +88,18 @@ run_remote "
     sleep 0.5
   done
   echo 'App did not start listening in time' >&2
+  exit 1
+"
+
+echo -e "${YELLOW}Running health check...${NC}"
+run_remote "
+  for i in \$(seq 1 20); do
+    if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 2 http://localhost:$APP_PORT/health >/dev/null; then
+      exit 0
+    fi
+    sleep 0.5
+  done
+  echo 'Health check failed' >&2
   exit 1
 "
 

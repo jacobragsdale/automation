@@ -21,13 +21,7 @@ async def lifespan(app: FastAPI):
     await next_dns_util.ensure_profile_loaded()
     scheduler = AsyncIOScheduler()
 
-    scheduler.add_job(
-        run_morning_lights_handler,
-        trigger="cron",
-        day_of_week="mon-fri",
-        hour=6,
-        minute=30,
-    )
+    scheduler.add_job(run_morning_lights_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=30)
     scheduler.add_job(run_night_lights_handler, trigger="cron", hour=20, minute=0)
 
     # scheduler.add_job(toggle_lockdown_handler, trigger="cron", day_of_week="mon-fri", hour=6, minute=0, args=[False])
@@ -65,6 +59,11 @@ async def root():
 async def run_morning_lights():
     await run_morning_lights_handler()
     return {"action": "morning_lights", "status": "ok"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/night_lights")
