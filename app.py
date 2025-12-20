@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -10,6 +10,7 @@ from handlers import (
     run_morning_lights_handler,
     run_all_lights_off_handler,
     run_all_lights_on_handler,
+    run_color_lights_handler,
     toggle_lockdown_handler,
 )
 from util.kasa_util import KasaUtil
@@ -84,6 +85,14 @@ async def run_all_lights_on():
 async def run_all_lights_off():
     await run_all_lights_off_handler()
     return {"action": "lights_off", "status": "ok"}
+
+
+@app.get("/lights_color")
+async def run_color_lights(color: str):
+    ok = await run_color_lights_handler(color)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Unsupported color value.")
+    return {"action": "lights_color", "color": color, "status": "ok"}
 
 
 @app.get("/toggle_lockdown/{active}")

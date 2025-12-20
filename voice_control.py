@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -14,6 +15,24 @@ import soundfile as sf
 import whisper
 
 WAKE_WORD = "computer"
+COLOR_WORDS = (
+    "candle light",
+    "candlelight",
+    "white",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "blue",
+    "indigo",
+    "violet",
+)
+
+
+@dataclass(frozen=True)
+class DetectedCommand:
+    action: str
+    color: Optional[str] = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -165,29 +184,46 @@ def capture_command_audio(
     return np.concatenate(audio_blocks)
 
 
-def detect_command(text: str) -> Optional[str]:
-    if "morning" in text and "light" in text:
-        return "morning"
-    if "night" in text and "light" in text:
-        return "night"
-    if ("turn on" in text or "lights on" in text) and "light" in text:
-        return "on"
-    if ("turn off" in text or "lights off" in text) and "light" in text:
-        return "off"
+def _find_color(text: str) -> Optional[str]:
+    for color in COLOR_WORDS:
+        if color in text:
+            return "candle light" if color == "candlelight" else color
     return None
 
 
-def trigger_command(api_base: str, command: str, timeout: float) -> None:
-    if command == "morning":
+def detect_command(text: str) -> Optional[DetectedCommand]:
+    if "morning" in text and "light" in text:
+        return DetectedCommand("morning")
+    if "night" in text and "light" in text:
+        return DetectedCommand("night")
+    if ("turn on" in text or "lights on" in text) and "light" in text:
+        return DetectedCommand("on")
+    if ("turn off" in text or "lights off" in text) and "light" in text:
+        return DetectedCommand("off")
+    color = _find_color(text)
+    if color and "light" in text and ("turn" in text or "set" in text):
+        return DetectedCommand("color", color=color)
+    return None
+
+
+def trigger_command(api_base: str, command: DetectedCommand, timeout: float) -> None:
+    if command.action == "morning":
         endpoint = "/morning_lights"
-    elif command == "night":
+    elif command.action == "night":
         endpoint = "/night_lights"
-    elif command == "on":
+    elif command.action == "on":
         endpoint = "/lights_on"
-    else:
+    elif command.action == "off":
         endpoint = "/lights_off"
+    elif command.action == "color":
+        endpoint = "/lights_color"
+    else:
+        raise ValueError(f"Unknown command action: {command.action}")
     url = api_base.rstrip("/") + endpoint
-    response = requests.get(url, timeout=timeout)
+    params = None
+    if command.action == "color" and command.color:
+        params = {"color": command.color}
+    response = requests.get(url, timeout=timeout, params=params)
     response.raise_for_status()
 
 
@@ -233,13 +269,13 @@ def listen_loop(
         now = time.time()
 
         if wake_heard and command and now - last_trigger_time >= cooldown:
-            logger.info("Wake word and command detected: %s", command)
+            logger.info("Wake word and command detected: %s", command.action)
             try:
                 play_beeps(2, output_device)
                 trigger_command(api_base, command, timeout=10.0)
                 last_trigger_time = now
             except requests.RequestException as exc:
-                logger.warning("Failed to trigger %s lights: %s", command, exc)
+                logger.warning("Failed to trigger %s lights: %s", command.action, exc)
             continue
 
         if wake_heard:
@@ -274,13 +310,13 @@ def listen_loop(
 
             command = detect_command(command_transcript)
             if command and time.time() - last_trigger_time >= cooldown:
-                logger.info("Command detected: %s", command)
+                logger.info("Command detected: %s", command.action)
                 try:
                     play_beeps(2, output_device)
                     trigger_command(api_base, command, timeout=10.0)
                     last_trigger_time = time.time()
                 except requests.RequestException as exc:
-                    logger.warning("Failed to trigger %s lights: %s", command, exc)
+                    logger.warning("Failed to trigger %s lights: %s", command.action, exc)
             else:
                 logger.info("Command not recognized.")
 
