@@ -34,6 +34,33 @@ The scheduler will run continuously in the foreground. To run it in the backgrou
 nohup python scheduler.py > scheduler_output.log 2>&1 &
 ```
 
+### Voice Control (Whisper)
+
+This project includes a wake-word listener that reacts to "computer" and then
+"run morning lights" or "run night lights" by calling the API endpoints.
+
+1. Install system dependencies:
+   - macOS: `brew install ffmpeg portaudio`
+   - Debian/Ubuntu: `sudo apt-get install ffmpeg portaudio19-dev`
+2. Install Python dependencies:
+   ```bash
+   uv sync
+   ```
+3. Start the API service (in another terminal):
+   ```bash
+   uv run uvicorn app:app --reload
+   ```
+4. Start the listener:
+   ```bash
+   uv run voice_control.py --api-base http://localhost:8000 --model base
+   ```
+
+Notes:
+- The first time you run the listener, your OS may prompt for microphone access.
+- Use `--log-transcripts` to troubleshoot recognition issues.
+- Use `--input-device` if you need to target a specific microphone.
+- Use `--output-device` if the beep output fails on your default audio device.
+
 ### Running as a systemd service (Linux)
 
 A systemd service file is provided to run the scheduler as a system service on Linux:
