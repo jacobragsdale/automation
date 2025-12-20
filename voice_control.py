@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import time
+from collections import deque
 from typing import Optional
 
 import numpy as np
@@ -18,7 +19,7 @@ WAKE_WORD = "computer"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Wake-word listener for Kasa light automations.")
     parser.add_argument("--api-base", default="http://localhost:8000", help="Base URL for the automation API.")
-    parser.add_argument("--model", default="small", help="Whisper model size (tiny, base, small, medium, large).")
+    parser.add_argument("--model", default="medium", help="Whisper model size (tiny, base, small, medium, large).")
     parser.add_argument("--language", default="en", help="Language hint for transcription.")
     parser.add_argument("--listen-seconds", type=float, default=2.5, help="Seconds to record per listen loop.")
     parser.add_argument("--command-timeout", type=float, default=7.0, help="Seconds to wait for a command.")
@@ -26,13 +27,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample-rate", type=int, default=16000, help="Sample rate for microphone capture.")
     parser.add_argument("--input-device", type=int, default=None, help="Sounddevice input device index.")
     parser.add_argument("--output-device", type=int, default=None, help="Sounddevice output device index.")
-    parser.add_argument("--compute-device", default="cpu", help="Whisper compute device (cpu, cuda, mps).")
+    parser.add_argument("--compute-device", default="mps", help="Whisper compute device (cpu, cuda, mps).")
+    parser.add_argument("--vad-threshold", type=float, default=0.015, help="RMS energy threshold for speech.")
+    parser.add_argument("--vad-frame-ms", type=int, default=30, help="Frame size for VAD in ms.")
+    parser.add_argument("--vad-silence-ms", type=int, default=600, help="Silence duration to end a command.")
+    parser.add_argument("--vad-max-seconds", type=float, default=5.0, help="Max duration of a command utterance.")
+    parser.add_argument("--vad-pre-roll-ms", type=int, default=250, help="Audio to keep before speech starts.")
     parser.add_argument(
         "--log-transcripts",
         action="store_true",
         help="Log every transcription result for debugging.",
     )
     return parser
+
+
+def write_audio_to_temp(audio: np.ndarray, sample_rate: int) -> str:
+    temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    temp_file.close()
+    sf.write(temp_file.name, audio, sample_rate)
+    return temp_file.name
 
 
 def record_audio(duration: float, sample_rate: int, input_device: Optional[int]) -> str:
@@ -44,10 +57,7 @@ def record_audio(duration: float, sample_rate: int, input_device: Optional[int])
         device=input_device,
     )
     sd.wait()
-    temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    temp_file.close()
-    sf.write(temp_file.name, audio, sample_rate)
-    return temp_file.name
+    return write_audio_to_temp(audio, sample_rate)
 
 
 def transcribe_audio(model: whisper.Whisper, audio_path: str, language: str) -> str:
@@ -87,16 +97,95 @@ def play_beeps(
             time.sleep(gap)
 
 
+def capture_command_audio(
+    sample_rate: int,
+    input_device: Optional[int],
+    vad_threshold: float,
+    frame_ms: int,
+    silence_ms: int,
+    max_seconds: float,
+    pre_roll_ms: int,
+    start_timeout: float,
+) -> Optional[np.ndarray]:
+    logger = logging.getLogger(__name__)
+    frames_per_block = max(1, int(sample_rate * frame_ms / 1000))
+    silence_blocks = max(1, int(silence_ms / frame_ms))
+    max_blocks = max(1, int(max_seconds / (frame_ms / 1000)))
+    pre_roll_blocks = max(0, int(pre_roll_ms / frame_ms))
+    pre_roll: deque[np.ndarray] = deque(maxlen=pre_roll_blocks)
+    audio_blocks: list[np.ndarray] = []
+    speech_started = False
+    silence_counter = 0
+    start_time = time.time()
+
+    try:
+        with sd.InputStream(
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            device=input_device,
+            blocksize=frames_per_block,
+        ) as stream:
+            while True:
+                block, _ = stream.read(frames_per_block)
+                if block.size == 0:
+                    continue
+                samples = block.reshape(-1)
+                rms = float(np.sqrt(np.mean(np.square(samples))))
+                if not speech_started:
+                    if pre_roll_blocks:
+                        pre_roll.append(samples.copy())
+                    if rms >= vad_threshold:
+                        speech_started = True
+                        audio_blocks.extend(pre_roll)
+                        pre_roll.clear()
+                        audio_blocks.append(samples)
+                        silence_counter = 0
+                    else:
+                        if time.time() - start_time >= start_timeout:
+                            return None
+                        continue
+                else:
+                    audio_blocks.append(samples)
+                    if rms >= vad_threshold:
+                        silence_counter = 0
+                    else:
+                        silence_counter += 1
+                        if silence_counter >= silence_blocks:
+                            break
+                    if len(audio_blocks) >= max_blocks:
+                        logger.info("Command capture reached max duration.")
+                        break
+    except Exception as exc:
+        logger.warning("Command capture failed: %s", exc)
+        return None
+
+    if not audio_blocks:
+        return None
+    return np.concatenate(audio_blocks)
+
+
 def detect_command(text: str) -> Optional[str]:
     if "morning" in text and "light" in text:
         return "morning"
     if "night" in text and "light" in text:
         return "night"
+    if ("turn on" in text or "lights on" in text) and "light" in text:
+        return "on"
+    if ("turn off" in text or "lights off" in text) and "light" in text:
+        return "off"
     return None
 
 
 def trigger_command(api_base: str, command: str, timeout: float) -> None:
-    endpoint = "/morning_lights" if command == "morning" else "/night_lights"
+    if command == "morning":
+        endpoint = "/morning_lights"
+    elif command == "night":
+        endpoint = "/night_lights"
+    elif command == "on":
+        endpoint = "/lights_on"
+    else:
+        endpoint = "/lights_off"
     url = api_base.rstrip("/") + endpoint
     response = requests.get(url, timeout=timeout)
     response.raise_for_status()
@@ -112,11 +201,14 @@ def listen_loop(
     sample_rate: int,
     input_device: Optional[int],
     output_device: Optional[int],
+    vad_threshold: float,
+    vad_frame_ms: int,
+    vad_silence_ms: int,
+    vad_max_seconds: float,
+    vad_pre_roll_ms: int,
     log_transcripts: bool,
 ) -> None:
     logger = logging.getLogger(__name__)
-    awaiting_command = False
-    command_deadline = 0.0
     last_trigger_time = 0.0
 
     while True:
@@ -131,8 +223,6 @@ def listen_loop(
                 os.unlink(audio_path)
 
         if not transcript:
-            if awaiting_command and time.time() > command_deadline:
-                awaiting_command = False
             continue
 
         if log_transcripts:
@@ -150,30 +240,49 @@ def listen_loop(
                 last_trigger_time = now
             except requests.RequestException as exc:
                 logger.warning("Failed to trigger %s lights: %s", command, exc)
-            awaiting_command = False
             continue
 
         if wake_heard:
             logger.info("Wake word detected. Awaiting command...")
             play_beeps(1, output_device)
-            awaiting_command = True
-            command_deadline = now + command_timeout
-            continue
+            command_audio = capture_command_audio(
+                sample_rate=sample_rate,
+                input_device=input_device,
+                vad_threshold=vad_threshold,
+                frame_ms=vad_frame_ms,
+                silence_ms=vad_silence_ms,
+                max_seconds=vad_max_seconds,
+                pre_roll_ms=vad_pre_roll_ms,
+                start_timeout=command_timeout,
+            )
+            if command_audio is None:
+                logger.info("No command detected before timeout.")
+                continue
 
-        if awaiting_command and command and now - last_trigger_time >= cooldown:
-            logger.info("Command detected: %s", command)
+            command_path = write_audio_to_temp(command_audio, sample_rate)
             try:
-                play_beeps(2, output_device)
-                trigger_command(api_base, command, timeout=10.0)
-                last_trigger_time = now
-            except requests.RequestException as exc:
-                logger.warning("Failed to trigger %s lights: %s", command, exc)
-            awaiting_command = False
-            continue
+                command_transcript = transcribe_audio(model, command_path, language)
+            except Exception as exc:
+                logger.warning("Command transcription failed: %s", exc)
+                continue
+            finally:
+                if os.path.exists(command_path):
+                    os.unlink(command_path)
 
-        if awaiting_command and now > command_deadline:
-            logger.info("Command timeout. Listening for wake word again.")
-            awaiting_command = False
+            if log_transcripts:
+                logger.info("Command transcript: %s", command_transcript)
+
+            command = detect_command(command_transcript)
+            if command and time.time() - last_trigger_time >= cooldown:
+                logger.info("Command detected: %s", command)
+                try:
+                    play_beeps(2, output_device)
+                    trigger_command(api_base, command, timeout=10.0)
+                    last_trigger_time = time.time()
+                except requests.RequestException as exc:
+                    logger.warning("Failed to trigger %s lights: %s", command, exc)
+            else:
+                logger.info("Command not recognized.")
 
 
 def main() -> None:
@@ -197,6 +306,11 @@ def main() -> None:
             sample_rate=args.sample_rate,
             input_device=args.input_device,
             output_device=args.output_device,
+            vad_threshold=args.vad_threshold,
+            vad_frame_ms=args.vad_frame_ms,
+            vad_silence_ms=args.vad_silence_ms,
+            vad_max_seconds=args.vad_max_seconds,
+            vad_pre_roll_ms=args.vad_pre_roll_ms,
             log_transcripts=args.log_transcripts,
         )
     except KeyboardInterrupt:

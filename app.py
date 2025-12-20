@@ -8,6 +8,8 @@ import uvicorn
 from handlers import (
     run_night_lights_handler,
     run_morning_lights_handler,
+    run_all_lights_off_handler,
+    run_all_lights_on_handler,
     toggle_lockdown_handler,
 )
 from util.kasa_util import KasaUtil
@@ -70,6 +72,18 @@ async def health():
 async def run_night_lights():
     await run_night_lights_handler()
     return {"action": "night_lights", "status": "ok"}
+
+
+@app.get("/lights_on")
+async def run_all_lights_on():
+    await run_all_lights_on_handler()
+    return {"action": "lights_on", "status": "ok"}
+
+
+@app.get("/lights_off")
+async def run_all_lights_off():
+    await run_all_lights_off_handler()
+    return {"action": "lights_off", "status": "ok"}
 
 
 @app.get("/toggle_lockdown/{active}")
