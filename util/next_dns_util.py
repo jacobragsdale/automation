@@ -105,6 +105,27 @@ class NextDnsUtil:
     async def add_to_denylist(self, domain: str):
         await self._add_to_denylist(domain)
 
+    async def get_settings(self) -> dict:
+        profile = await self.ensure_profile_loaded()
+        data = profile.get("data", {})
+        return {
+            "name": data.get("name"),
+            "security": data.get("security", {}),
+            "privacy": data.get("privacy", {}),
+            "performance": data.get("performance", {}),
+            "settings": data.get("settings", {}),
+        }
+
+    async def get_parental_controls(self) -> dict:
+        profile = await self.ensure_profile_loaded()
+        data = profile.get("data", {})
+        return data.get("parentalControl", {})
+
+    async def get_blocklist(self) -> list:
+        profile = await self.ensure_profile_loaded()
+        data = profile.get("data", {})
+        return data.get("denylist", [])
+
 
 async def main():
     await NextDnsUtil().toggle_lockdown(active=False)

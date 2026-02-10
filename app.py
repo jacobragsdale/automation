@@ -107,5 +107,23 @@ async def add_to_denylist(domain: str):
     return {"action": "add_to_denylist", "domain": domain, "status": "ok"}
 
 
+@app.get("/nextdns/settings")
+async def get_nextdns_settings():
+    settings = await NextDnsUtil().get_settings()
+    return {"action": "get_settings", "data": settings, "status": "ok"}
+
+
+@app.get("/nextdns/parental_controls")
+async def get_nextdns_parental_controls():
+    parental_controls = await NextDnsUtil().get_parental_controls()
+    return {"action": "get_parental_controls", "data": parental_controls, "status": "ok"}
+
+
+@app.get("/nextdns/blocklist")
+async def get_nextdns_blocklist():
+    blocklist = await NextDnsUtil().get_blocklist()
+    return {"action": "get_blocklist", "data": blocklist, "status": "ok"}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
