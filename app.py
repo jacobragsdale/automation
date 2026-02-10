@@ -95,6 +95,12 @@ async def run_color_lights(color: str):
     return {"action": "lights_color", "color": color, "status": "ok"}
 
 
+@app.get("/kasa/devices")
+async def get_kasa_devices(force_refresh: bool = False):
+    devices = await KasaUtil().get_devices_inventory(force_refresh=force_refresh)
+    return {"action": "kasa_devices", "count": len(devices), "data": devices, "status": "ok"}
+
+
 @app.get("/toggle_lockdown/{active}")
 async def toggle_lockdown(active: bool):
     await toggle_lockdown_handler(active)

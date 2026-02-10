@@ -1,1 +1,7 @@
 .env
+__pycache__/
+*.py[cod]
+util/devices.json
+util/devices_inventory.json
+util/manual_provision_result.json
+util/provision_results.json

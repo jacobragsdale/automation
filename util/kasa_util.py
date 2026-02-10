@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 from time import monotonic
-from typing import Dict, Set
+from typing import Any, Dict, Set
 
 from kasa import Discover
 from kasa.iot import IotDevice
@@ -24,9 +24,14 @@ class KasaUtil:
             return
         self.devices: Dict[str, IotDevice] = {}
         self._devices_file_path = Path(__file__).resolve().parent / "devices.json"
+        self._inventory_file_path = Path(__file__).resolve().parent / "devices_inventory.json"
         self._discovery_lock = asyncio.Lock()
         self._last_discovery = 0.0
         self._initialized = True
+
+    @property
+    def inventory_file_path(self) -> Path:
+        return self._inventory_file_path
 
     def _load_saved_device_ips(self) -> Set[str]:
         try:
@@ -41,6 +46,13 @@ class KasaUtil:
             self._devices_file_path.write_text(payload, encoding="utf-8")
         except Exception as e:
             print(f"Failed to save devices to {self._devices_file_path}: {e}")
+
+    def _save_device_inventory(self, inventory: list[dict[str, Any]]) -> None:
+        try:
+            payload = json.dumps(inventory, indent=2)
+            self._inventory_file_path.write_text(payload, encoding="utf-8")
+        except Exception as e:
+            print(f"Failed to save device inventory to {self._inventory_file_path}: {e}")
 
     def _stale(self, force_refresh: bool) -> bool:
         return force_refresh or not self.devices or (monotonic() - self._last_discovery) >= self.DISCOVERY_TTL
@@ -105,6 +117,68 @@ class KasaUtil:
     async def _update_all(self) -> None:
         await asyncio.gather(*(self._update_device(dev) for dev in self.devices.values()))
 
+    @staticmethod
+    def _safe_value(value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        return str(value)
+
+    @staticmethod
+    def _safe_call(getter, default: Any = None) -> Any:
+        try:
+            return getter()
+        except Exception:
+            return default
+
+    def _device_to_inventory(self, host: str, device: IotDevice) -> dict[str, Any]:
+        device_type = self._safe_call(lambda: getattr(device, "device_type", None))
+        if hasattr(device_type, "value"):
+            device_type = getattr(device_type, "value")
+        elif device_type is not None:
+            device_type = str(device_type)
+
+        children = self._safe_call(lambda: getattr(device, "children", []), default=[]) or []
+        child_aliases = [
+            str(alias)
+            for alias in (self._safe_call(lambda child=child: getattr(child, "alias", None)) for child in children)
+            if alias
+        ]
+        location = self._safe_call(lambda: getattr(device, "location", (None, None)), default=(None, None))
+        lat, lon = (None, None)
+        if isinstance(location, (tuple, list)) and len(location) >= 2:
+            lat, lon = location[0], location[1]
+        return {
+            "host": host,
+            "alias": self._safe_value(self._safe_call(lambda: getattr(device, "alias", None))),
+            "model": self._safe_value(self._safe_call(lambda: getattr(device, "model", None))),
+            "mac": self._safe_value(self._safe_call(lambda: getattr(device, "mac", None))),
+            "device_id": self._safe_value(self._safe_call(lambda: getattr(device, "device_id", None))),
+            "device_type": self._safe_value(device_type),
+            "is_on": bool(self._safe_call(lambda: getattr(device, "is_on", False), default=False)),
+            "is_bulb": bool(self._safe_call(lambda: getattr(device, "is_bulb", False), default=False)),
+            "is_plug": bool(self._safe_call(lambda: getattr(device, "is_plug", False), default=False)),
+            "brightness": self._safe_value(self._safe_call(lambda: getattr(device, "brightness", None))),
+            "hsv": self._safe_value(self._safe_call(lambda: getattr(device, "hsv", None))),
+            "color_temp": self._safe_value(self._safe_call(lambda: getattr(device, "color_temp", None))),
+            "latitude": lat,
+            "longitude": lon,
+            "children": child_aliases,
+        }
+
+    async def get_devices_inventory(self, force_refresh: bool = False) -> list[dict[str, Any]]:
+        devices = await self.discover_devices(force_refresh=force_refresh)
+        if not devices:
+            self._save_device_inventory([])
+            return []
+
+        await self._update_all()
+        inventory = [
+            self._device_to_inventory(host, device)
+            for host, device in sorted(devices.items(), key=lambda item: item[0])
+        ]
+        self._save_device_inventory(inventory)
+        return inventory
+
     async def are_lights_on(self) -> bool:
         await self.discover_devices()
         if not self.devices:
@@ -138,5 +212,4 @@ class KasaUtil:
 
 
 if __name__ == "__main__":
-    asyncio.run(KasaUtil().discover_devices())
-    print(asyncio.run(KasaUtil().execute_light_command("on", (40, 10, 100), 100)))
+    print(json.dumps(asyncio.run(KasaUtil().get_devices_inventory(force_refresh=True)), indent=2))

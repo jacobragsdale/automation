@@ -7,13 +7,8 @@ dependencies = [
     "python-kasa>=0.10.2",
     "apscheduler>=3.10.1",
     "sqlalchemy>=2.0.0",
-    "requests>=2.32.4",
     "fastapi>=0.115.14",
     "uvicorn>=0.34.3",
     "httpx>=0.28.1",
     "load-dotenv>=0.1.0",
-    "openai-whisper>=20231117",
-    "sounddevice>=0.5.0",
-    "soundfile>=0.12.1",
-    "numpy>=2.1.0",
 ]
