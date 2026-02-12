@@ -38,8 +38,9 @@ async def turn_lights_off() -> dict[str, str]:
 
 @router.post("/color")
 async def set_lights_color(payload: ColorRequest) -> dict[str, str]:
-    success = await handler.set_color(payload.color)
-    if not success:
+    try:
+        await handler.set_color(payload.color)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Unsupported color value.")
     return {"action": "lights_color", "color": payload.color, "status": "ok"}
 

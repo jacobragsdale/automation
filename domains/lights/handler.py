@@ -8,6 +8,11 @@ from domains.weather.repository import WeatherRepository
 lights_repository = LightsRepository()
 weather_repository = WeatherRepository()
 
+MORNING_SCENE_HSV = (40, 10, 100)
+MORNING_SCENE_BRIGHTNESS = 100
+NIGHT_SCENE_HSV = (16, 100, 99)
+NIGHT_SCENE_BRIGHTNESS = 100
+
 COLOR_MAP: dict[str, tuple[int, int, int]] = {
     "red": (0, 100, 100),
     "orange": (30, 100, 100),
@@ -63,13 +68,13 @@ async def initialize_lights() -> None:
 
 
 async def run_morning_scene() -> None:
-    await lights_repository.set_scene_color((40, 10, 100), 100)
+    await lights_repository.set_all_color(MORNING_SCENE_HSV, MORNING_SCENE_BRIGHTNESS)
 
 
 async def run_night_scene() -> None:
     are_on = await lights_repository.are_lights_on()
     if are_on:
-        await lights_repository.set_scene_color((16, 100, 99), 100)
+        await lights_repository.set_all_color(NIGHT_SCENE_HSV, NIGHT_SCENE_BRIGHTNESS)
 
 
 async def turn_all_lights_on() -> None:
@@ -80,13 +85,12 @@ async def turn_all_lights_off() -> None:
     await lights_repository.turn_all_off()
 
 
-async def set_color(color: str) -> bool:
+async def set_color(color: str) -> None:
     normalized_color = _normalize_color(color)
     hsv = COLOR_MAP.get(normalized_color)
     if hsv is None:
-        return False
-    await lights_repository.set_color(hsv, 100)
-    return True
+        raise ValueError("Unsupported color value.")
+    await lights_repository.set_all_color(hsv, 100)
 
 
 async def get_devices(force_refresh: bool = False) -> list[dict[str, object]]:

@@ -9,11 +9,11 @@ FastAPI service and scheduler for Kasa lighting routines and NextDNS controls.
 - `scheduler.py`: optional standalone scheduler process that uses `schedules.py`.
 - `domains/system/controller.py`: system routes (`/`, `/health`).
 - `domains/lights/`: layered lights modules (`controller.py`, `handler.py`, `repository.py`).
+- `domains/lights/devices.json`: cached Kasa host targets for faster rediscovery.
+- `domains/lights/devices_inventory.json`: latest discovered Kasa inventory snapshot.
+- `domains/lights/kasa_onboarding_util.py`: utility function + runnable entrypoint for onboarding a reset bulb.
 - `domains/weather/`: layered weather modules (`controller.py`, `handler.py`, `repository.py`).
 - `domains/nextdns/`: layered NextDNS modules (`controller.py`, `handler.py`, `repository.py`).
-- `util/devices.json`: cached Kasa host targets for faster rediscovery.
-- `util/devices_inventory.json`: latest discovered Kasa inventory snapshot.
-- `util/kasa_onboarding_util.py`: utility function + runnable entrypoint for onboarding a reset bulb.
 - `deploy.sh`: rsync + remote restart deploy helper.
 - `automation.service`: systemd unit for running the API.
 
@@ -22,8 +22,8 @@ FastAPI service and scheduler for Kasa lighting routines and NextDNS controls.
 Set these in `.env`:
 
 - `NEXTDNS_API_KEY`: required for NextDNS endpoints.
-- `WIFI_SSID`: used by `util/kasa_onboarding_util.py`.
-- `WIFI_PASSWORD`: used by `util/kasa_onboarding_util.py`.
+- `WIFI_SSID`: used by `domains/lights/kasa_onboarding_util.py`.
+- `WIFI_PASSWORD`: used by `domains/lights/kasa_onboarding_util.py`.
 
 ## Development
 
@@ -100,7 +100,7 @@ Supported colors:
 This project keeps a single onboarding utility path:
 
 ```bash
-uv run python util/kasa_onboarding_util.py
+uv run python domains/lights/kasa_onboarding_util.py
 ```
 
 The command expects you are connected to the bulb's reset TP-LINK/Kasa soft AP.

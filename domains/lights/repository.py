@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 from time import monotonic
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from kasa import Discover
 from kasa.iot import IotDevice
@@ -23,12 +23,9 @@ class LightsRepository:
         if getattr(self, "_initialized", False):
             return
 
-        project_root = Path(__file__).resolve().parents[2]
-        util_dir = project_root / "util"
-
         self.devices: dict[str, IotDevice] = {}
-        self._devices_file_path = util_dir / "devices.json"
-        self._inventory_file_path = util_dir / "devices_inventory.json"
+        self._devices_file_path = Path(__file__).resolve().parent / "devices.json"
+        self._inventory_file_path = Path(__file__).resolve().parent / "devices_inventory.json"
         self._discovery_lock = asyncio.Lock()
         self._last_discovery = 0.0
         self._initialized = True
@@ -189,67 +186,78 @@ class LightsRepository:
         await self._update_all()
         return any(dev.is_on for dev in self.devices.values())
 
-    async def _run_command(self, dev: IotDevice, action: str, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        async def _execute() -> None:
-            if action == "on":
-                await dev.turn_on()
-            elif action == "off":
-                await dev.turn_off()
-            elif action == "color":
-                await dev.set_hsv(*color_hsv)
-                await dev.set_brightness(brightness)
-                await dev.turn_on()
-            else:
-                raise RuntimeError(f"Unknown action: {action}")
-
-        await self._with_timeout(_execute(), f"Command timed out for {getattr(dev, 'alias', 'Unknown device')}")
-
-    async def execute_light_command(self, action: str, color_hsv: tuple[int, int, int], brightness: int) -> None:
+    async def _get_updated_devices(self) -> list[IotDevice]:
         await self.discover_devices()
         if not self.devices:
-            print("No Kasa devices available to control.")
-            return
+            return []
 
         await self._update_all()
-        await asyncio.gather(*(self._run_command(dev, action, color_hsv, brightness) for dev in self.devices.values()))
+        return list(self.devices.values())
 
-    async def _run_color_if_on(self, dev: IotDevice, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        async def _execute() -> None:
-            if not dev.is_on:
-                return
-            await dev.set_hsv(*color_hsv)
-            await dev.set_brightness(brightness)
-
-        await self._with_timeout(
-            _execute(),
-            f"Color command timed out for {getattr(dev, 'alias', 'Unknown device')}",
+    async def _run_for_devices(
+        self,
+        devices: list[IotDevice],
+        command_factory: Callable[[IotDevice], Awaitable[None]],
+        timeout_message_prefix: str,
+    ) -> None:
+        await asyncio.gather(
+            *(
+                self._with_timeout(
+                    command_factory(dev),
+                    f"{timeout_message_prefix} {getattr(dev, 'alias', 'Unknown device')}",
+                )
+                for dev in devices
+            )
         )
 
-    async def execute_color_on_active_lights(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        await self.discover_devices()
-        if not self.devices:
+    async def turn_all_on(self) -> None:
+        devices = await self._get_updated_devices()
+        if not devices:
             print("No Kasa devices available to control.")
             return
 
-        await self._update_all()
-        on_devices = [dev for dev in self.devices.values() if dev.is_on]
+        async def _turn_on(dev: IotDevice) -> None:
+            await dev.turn_on()
+
+        await self._run_for_devices(devices, _turn_on, "Command timed out for")
+
+    async def turn_all_off(self) -> None:
+        devices = await self._get_updated_devices()
+        if not devices:
+            print("No Kasa devices available to control.")
+            return
+
+        async def _turn_off(dev: IotDevice) -> None:
+            await dev.turn_off()
+
+        await self._run_for_devices(devices, _turn_off, "Command timed out for")
+
+    async def set_all_color(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
+        devices = await self._get_updated_devices()
+        if not devices:
+            print("No Kasa devices available to control.")
+            return
+
+        async def _set_color(dev: IotDevice) -> None:
+            await dev.set_hsv(*color_hsv)
+            await dev.set_brightness(brightness)
+            await dev.turn_on()
+
+        await self._run_for_devices(devices, _set_color, "Command timed out for")
+
+    async def set_color_on_active_lights(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
+        devices = await self._get_updated_devices()
+        if not devices:
+            print("No Kasa devices available to control.")
+            return
+
+        on_devices = [dev for dev in devices if dev.is_on]
         if not on_devices:
             print("No lights are currently on; skipping color update.")
             return
 
-        await asyncio.gather(*(self._run_color_if_on(dev, color_hsv, brightness) for dev in on_devices))
+        async def _set_color_if_on(dev: IotDevice) -> None:
+            await dev.set_hsv(*color_hsv)
+            await dev.set_brightness(brightness)
 
-    async def set_scene_color(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        await self.execute_light_command("color", color_hsv, brightness)
-
-    async def turn_all_on(self) -> None:
-        await self.execute_light_command("on", (0, 0, 0), 0)
-
-    async def turn_all_off(self) -> None:
-        await self.execute_light_command("off", (0, 0, 0), 0)
-
-    async def set_color(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        await self.execute_light_command("color", color_hsv, brightness)
-
-    async def set_color_on_active_lights(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        await self.execute_color_on_active_lights(color_hsv=color_hsv, brightness=brightness)
+        await self._run_for_devices(on_devices, _set_color_if_on, "Color command timed out for")
