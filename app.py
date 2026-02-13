@@ -11,7 +11,7 @@ from domains.nextdns import handler as nextdns_handler
 from domains.nextdns.controller import router as nextdns_router
 from domains.system.controller import router as system_router
 from domains.weather.controller import router as weather_router
-from schedules import initialize_schedules, register_schedules
+from schedules import register_schedules
 
 OPENAPI_TAGS = [
     {"name": "System", "description": "Service health and status endpoints."},
@@ -28,7 +28,6 @@ async def lifespan(app: FastAPI):
 
     scheduler = AsyncIOScheduler()
     register_schedules(scheduler)
-    await initialize_schedules(scheduler)
 
     scheduler.start()
     try:

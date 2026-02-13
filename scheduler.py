@@ -2,13 +2,12 @@ import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from schedules import initialize_schedules, register_schedules
+from schedules import register_schedules
 
 
 async def run_scheduler() -> None:
     scheduler = AsyncIOScheduler()
     register_schedules(scheduler)
-    await initialize_schedules(scheduler)
 
     scheduler.start()
     try:
