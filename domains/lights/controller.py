@@ -1,15 +1,21 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from domains.lights import handler
 
 router = APIRouter(prefix="/lights", tags=["Lights"])
 
+Hue = Annotated[int, Field(ge=0, le=360)]
+Saturation = Annotated[int, Field(ge=0, le=100)]
+Value = Annotated[int, Field(ge=0, le=100)]
+
 
 class ColorRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    color: str = Field(min_length=1)
+    hsv: tuple[Hue, Saturation, Value]
 
 
 @router.post("/scenes/morning")
@@ -37,12 +43,9 @@ async def turn_lights_off() -> dict[str, str]:
 
 
 @router.post("/color")
-async def set_lights_color(payload: ColorRequest) -> dict[str, str]:
-    try:
-        await handler.set_color(payload.color)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Unsupported color value.")
-    return {"action": "lights_color", "color": payload.color, "status": "ok"}
+async def set_lights_color(payload: ColorRequest) -> dict[str, object]:
+    await handler.set_color(payload.hsv)
+    return {"action": "lights_color", "hsv": list(payload.hsv), "status": "ok"}
 
 
 @router.get("/devices")

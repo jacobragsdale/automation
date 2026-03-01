@@ -163,20 +163,31 @@ class NextDnsRepository:
         await self._toggle_lockdown(active)
 
     async def _add_to_denylist(self, domain: str) -> None:
-        if not domain:
+        normalized_domain = self._normalize_domain(domain)
+        if not normalized_domain:
             raise ValueError("Domain must be provided")
 
-        await self.ensure_profile_loaded()
-        headers = self._ensure_headers()
-        if not self.profile_url:
-            raise RuntimeError("NextDNS profile URL is unavailable")
+        profile = await self.ensure_profile_loaded(force_refresh=True)
+        deny_entries = profile.get("data", {}).get("denylist", [])
+        existing_entry = next(
+            (
+                entry
+                for entry in deny_entries
+                if self._normalize_domain(str(entry.get("id", ""))) == normalized_domain
+            ),
+            None,
+        )
 
-        async with httpx.AsyncClient(headers=headers, timeout=10) as client:
-            response = await client.post(
-                f"{self.profile_url}/denylist",
-                json={"id": domain, "active": True},
-            )
-            response.raise_for_status()
+        if existing_entry:
+            await self._request("PATCH", f"/denylist/{quote_plus(normalized_domain)}", json={"active": True})
+        else:
+            try:
+                await self._request("POST", "/denylist", json={"id": normalized_domain, "active": True})
+            except RuntimeError as exc:
+                # Handle a race where another request created the rule first.
+                if "(409)" not in str(exc):
+                    raise
+                await self._request("PATCH", f"/denylist/{quote_plus(normalized_domain)}", json={"active": True})
 
         await self.ensure_profile_loaded(force_refresh=True)
 

@@ -13,28 +13,12 @@ MORNING_SCENE_BRIGHTNESS = 100
 NIGHT_SCENE_HSV = (16, 100, 99)
 NIGHT_SCENE_BRIGHTNESS = 100
 
-COLOR_MAP: dict[str, tuple[int, int, int]] = {
-    "red": (0, 100, 100),
-    "orange": (30, 100, 100),
-    "yellow": (55, 100, 100),
-    "green": (120, 100, 100),
-    "blue": (220, 100, 100),
-    "indigo": (250, 100, 100),
-    "violet": (275, 100, 100),
-    "white": (0, 0, 100),
-    "candle light": (30, 40, 100),
-}
-
 SUNSET_FADE_LOCATION = "Nashville, TN"
 SUNSET_FADE_STEPS = 20
 SUNSET_FADE_DURATION_MINUTES = 60
 SUNSET_FADE_START_HSV = (30, 40, 100)
 SUNSET_FADE_END_HSV = (0, 100, 100)
 SUNSET_FADE_JOB_PREFIX = "sunset_fade_step_"
-
-
-def _normalize_color(color: str) -> str:
-    return " ".join(color.strip().lower().replace("-", " ").split())
 
 
 def _interpolate_hsv(
@@ -85,12 +69,8 @@ async def turn_all_lights_off() -> None:
     await lights_repository.turn_all_off()
 
 
-async def set_color(color: str) -> None:
-    normalized_color = _normalize_color(color)
-    hsv = COLOR_MAP.get(normalized_color)
-    if hsv is None:
-        raise ValueError("Unsupported color value.")
-    await lights_repository.set_all_color(hsv, 100)
+async def set_color(hsv: tuple[int, int, int]) -> None:
+    await lights_repository.set_all_color(hsv, hsv[2])
 
 
 async def get_devices(force_refresh: bool = False) -> list[dict[str, object]]:
@@ -155,3 +135,4 @@ async def refresh_sunset_fade_jobs(scheduler: AsyncIOScheduler) -> None:
         f"Scheduled {scheduled_count} sunset fade jobs for {sunset_payload.get('resolved_location', SUNSET_FADE_LOCATION)} "
         f"at {sunset_at.isoformat()}."
     )
+

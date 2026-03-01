@@ -5,7 +5,7 @@ FastAPI service and scheduler for Kasa lighting routines and NextDNS controls.
 ## Project layout
 
 - `app.py`: FastAPI app composition (routers + lifespan + scheduler bootstrap).
-- `schedules.py`: centralized APScheduler registration; jobs call handlers only.
+- `schedules.py`: centralized APScheduler registration (currently one nightly lights job).
 - `scheduler.py`: optional standalone scheduler process that uses `schedules.py`.
 - `domains/system/controller.py`: system routes (`/`, `/health`).
 - `domains/lights/`: layered lights modules (`controller.py`, `handler.py`, `repository.py`).
@@ -14,6 +14,7 @@ FastAPI service and scheduler for Kasa lighting routines and NextDNS controls.
 - `domains/lights/kasa_onboarding_util.py`: utility function + runnable entrypoint for onboarding a reset bulb.
 - `domains/weather/`: layered weather modules (`controller.py`, `handler.py`, `repository.py`).
 - `domains/nextdns/`: layered NextDNS modules (`controller.py`, `handler.py`, `repository.py`).
+- `domains/stocks/`: layered stocks modules (`controller.py`, `handler.py`, `repository.py`).
 - `deploy.sh`: rsync + remote restart deploy helper.
 - `automation.service`: systemd unit for running the API.
 
@@ -22,6 +23,7 @@ FastAPI service and scheduler for Kasa lighting routines and NextDNS controls.
 Set these in `.env`:
 
 - `NEXTDNS_API_KEY`: required for NextDNS endpoints.
+- `FMP_API_KEY`: required for stocks endpoints (Financial Modeling Prep).
 - `WIFI_SSID`: used by `domains/lights/kasa_onboarding_util.py`.
 - `WIFI_PASSWORD`: used by `domains/lights/kasa_onboarding_util.py`.
 
@@ -45,6 +47,12 @@ Run standalone scheduler:
 uv run scheduler.py
 ```
 
+## Scheduled automations
+
+- `lights_night_scene` runs daily at `8:00 PM` local server time.
+- No morning or sunset-fade jobs are scheduled.
+- The morning scene endpoint remains available for manual runs.
+
 ## API endpoints
 
 ### Health / status
@@ -57,24 +65,26 @@ uv run scheduler.py
 - `GET /weather` - current weather + today's high/low (defaults to `Nashville, TN`).
 - `GET /weather?location=Austin,TX` - weather for a custom location.
 - `GET /weather?location=London&units=metric` - weather in metric units.
+- `GET /weather/forecast/daily` - multi-day future forecast (defaults to 5 days).
+- `GET /weather/forecast/daily?location=Austin,TX&days=7` - 7-day forecast for a location.
+- `GET /weather/forecast/hourly` - hourly future forecast (defaults to next 24 hours).
+- `GET /weather/forecast/hourly?location=London&units=metric&hours=48` - 48-hour metric forecast.
 
 Weather notes:
 - Default units are imperial (`F`, `mph`); set `units=metric` for `C`, `km/h`.
+- Daily forecast `days` supports `1-16`; hourly forecast `hours` supports `1-168`.
 - If a requested location cannot be resolved, the endpoint falls back to `Nashville, TN`.
 - Response includes structured weather fields and a plain-English `summary`.
 
 ### Light controls
 
-- `POST /lights/scenes/morning` - run morning scene.
+- `POST /lights/scenes/morning` - run morning scene manually (not scheduled).
 - `POST /lights/scenes/night` - run night scene (only if lights are already on).
 - `POST /lights/power/on` - turn all discovered lights on.
 - `POST /lights/power/off` - turn all discovered lights off.
-- `POST /lights/color` - set lights to a supported color.
-  - Body example: `{"color":"red"}`
+- `POST /lights/color` - set lights using HSV values.
+  - Body example: `{"hsv":[220,100,80]}`
 - `GET /lights/devices?force_refresh=<bool>` - return discovered Kasa inventory.
-
-Supported colors:
-`red`, `orange`, `yellow`, `green`, `blue`, `indigo`, `violet`, `white`, `candle light`
 
 ### NextDNS controls
 
@@ -94,6 +104,19 @@ Supported colors:
 - `POST /nextdns/focus-sessions` - start a temporary self-control session and auto-rollback at expiry.
   - Body example: `{"duration_minutes": 90, "domains": ["youtube.com"], "categoryIds": ["social-networks"], "serviceIds": ["reddit"], "safeSearch": true, "youtubeRestrictedMode": true, "blockBypass": true, "reason": "deep work"}`
 - `GET /nextdns/filters/state` - consolidated view of parental controls, privacy, deny/allow lists, and active focus sessions.
+
+### Stocks
+
+- `GET /stocks/quote?symbol=AAPL` - current quote snapshot with cache metadata.
+- `GET /stocks/quote?symbol=AAPL&force_refresh=true` - bypass cache for quote.
+- `GET /stocks/ratios?symbol=AAPL` - key TTM valuation and leverage ratios (including PE).
+- `GET /stocks/company?symbol=AAPL` - company profile fields (name, sector, description, market cap, etc.).
+
+Stocks notes:
+- Uses Financial Modeling Prep (`https://financialmodelingprep.com/stable`).
+- Symbol input is normalized (trimmed + uppercased).
+- Responses include `provider` (`fmp`) and `cached` flags.
+- Invalid symbols return `400`; unknown symbols return `404`; upstream failures return `502`.
 
 ## New bulb onboarding
 

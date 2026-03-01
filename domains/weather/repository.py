@@ -1,4 +1,5 @@
 from datetime import datetime
+from math import ceil
 from typing import Any
 
 import httpx
@@ -107,6 +108,20 @@ class WeatherRepository:
             return str(rounded)
         return str(value)
 
+    @staticmethod
+    def _parse_provider_datetime(value: Any) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+    def _get_unit_config(self, units: str) -> dict[str, str]:
+        if units not in self.UNIT_CONFIG:
+            raise RuntimeError("Unsupported unit system.")
+        return self.UNIT_CONFIG[units]
+
     async def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(url, params=params)
@@ -172,11 +187,8 @@ class WeatherRepository:
         }
 
     async def get_weather(self, location: str, units: str) -> dict[str, Any]:
-        if units not in self.UNIT_CONFIG:
-            raise RuntimeError("Unsupported unit system.")
-
+        unit_config = self._get_unit_config(units)
         location_data = await self.resolve_location(location)
-        unit_config = self.UNIT_CONFIG[units]
 
         forecast = await self._get_json(
             self.FORECAST_URL,
@@ -235,6 +247,161 @@ class WeatherRepository:
                 "today_high": today_high,
                 "today_low": today_low,
                 "observation_time": current.get("time"),
+                "temperature_unit": temp_symbol,
+                "wind_speed_unit": wind_symbol,
+            },
+            "summary": summary,
+        }
+
+    async def get_daily_forecast(self, location: str, units: str, days: int) -> dict[str, Any]:
+        if days < 1 or days > 16:
+            raise RuntimeError("days must be between 1 and 16.")
+
+        unit_config = self._get_unit_config(units)
+        location_data = await self.resolve_location(location)
+        forecast = await self._get_json(
+            self.FORECAST_URL,
+            {
+                "latitude": location_data["latitude"],
+                "longitude": location_data["longitude"],
+                "daily": (
+                    "weather_code,temperature_2m_max,temperature_2m_min,"
+                    "precipitation_probability_max"
+                ),
+                "temperature_unit": unit_config["temperature_unit"],
+                "timezone": "auto",
+                "forecast_days": days,
+            },
+        )
+
+        daily = forecast.get("daily") or {}
+        times = daily.get("time") or []
+        highs = daily.get("temperature_2m_max") or []
+        lows = daily.get("temperature_2m_min") or []
+        weather_codes = daily.get("weather_code") or []
+        precipitation = daily.get("precipitation_probability_max") or []
+
+        entries: list[dict[str, Any]] = []
+        for index, date_value in enumerate(times):
+            weather_code = weather_codes[index] if index < len(weather_codes) else None
+            entries.append(
+                {
+                    "date": date_value,
+                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions"),
+                    "weather_code": weather_code,
+                    "high_temperature": highs[index] if index < len(highs) else None,
+                    "low_temperature": lows[index] if index < len(lows) else None,
+                    "precipitation_probability_max": (
+                        precipitation[index] if index < len(precipitation) else None
+                    ),
+                }
+            )
+
+        if not entries:
+            raise RuntimeError("Weather provider returned incomplete daily forecast data.")
+
+        temp_symbol = unit_config["temp_symbol"]
+        summary = (
+            f"{len(entries)}-day forecast for {location_data['resolved_location']}: "
+            f"{entries[0]['date']} through {entries[-1]['date']}."
+        )
+
+        return {
+            "requested_location": location_data["requested_location"],
+            "resolved_location": location_data["resolved_location"],
+            "fallback_used": location_data["fallback_used"],
+            "units": units,
+            "days": days,
+            "data": {
+                "forecast": entries,
+                "temperature_unit": temp_symbol,
+            },
+            "summary": summary,
+        }
+
+    async def get_hourly_forecast(self, location: str, units: str, hours: int) -> dict[str, Any]:
+        if hours < 1 or hours > 168:
+            raise RuntimeError("hours must be between 1 and 168.")
+
+        unit_config = self._get_unit_config(units)
+        location_data = await self.resolve_location(location)
+        forecast_days = min(16, max(1, ceil(hours / 24) + 1))
+        forecast = await self._get_json(
+            self.FORECAST_URL,
+            {
+                "latitude": location_data["latitude"],
+                "longitude": location_data["longitude"],
+                "current": "temperature_2m",
+                "hourly": (
+                    "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                    "wind_speed_10m,precipitation_probability,weather_code"
+                ),
+                "temperature_unit": unit_config["temperature_unit"],
+                "wind_speed_unit": unit_config["wind_speed_unit"],
+                "timezone": "auto",
+                "forecast_days": forecast_days,
+            },
+        )
+
+        hourly = forecast.get("hourly") or {}
+        times = hourly.get("time") or []
+        temperatures = hourly.get("temperature_2m") or []
+        apparent_temperatures = hourly.get("apparent_temperature") or []
+        humidity = hourly.get("relative_humidity_2m") or []
+        wind_speed = hourly.get("wind_speed_10m") or []
+        precipitation = hourly.get("precipitation_probability") or []
+        weather_codes = hourly.get("weather_code") or []
+
+        current = forecast.get("current") or {}
+        current_time = self._parse_provider_datetime(current.get("time"))
+
+        entries: list[dict[str, Any]] = []
+        for index, timestamp_raw in enumerate(times):
+            timestamp = self._parse_provider_datetime(timestamp_raw)
+            if timestamp is None:
+                continue
+            if current_time is not None and timestamp <= current_time:
+                continue
+
+            weather_code = weather_codes[index] if index < len(weather_codes) else None
+            entries.append(
+                {
+                    "time": timestamp.isoformat(timespec="minutes"),
+                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions"),
+                    "weather_code": weather_code,
+                    "temperature": temperatures[index] if index < len(temperatures) else None,
+                    "feels_like_temperature": (
+                        apparent_temperatures[index] if index < len(apparent_temperatures) else None
+                    ),
+                    "humidity": humidity[index] if index < len(humidity) else None,
+                    "wind_speed": wind_speed[index] if index < len(wind_speed) else None,
+                    "precipitation_probability": (
+                        precipitation[index] if index < len(precipitation) else None
+                    ),
+                }
+            )
+            if len(entries) >= hours:
+                break
+
+        if not entries:
+            raise RuntimeError("Weather provider returned no future hourly forecast data.")
+
+        temp_symbol = unit_config["temp_symbol"]
+        wind_symbol = unit_config["wind_symbol"]
+        summary = (
+            f"Next {len(entries)} hours in {location_data['resolved_location']} from "
+            f"{entries[0]['time']} to {entries[-1]['time']}."
+        )
+
+        return {
+            "requested_location": location_data["requested_location"],
+            "resolved_location": location_data["resolved_location"],
+            "fallback_used": location_data["fallback_used"],
+            "units": units,
+            "hours_requested": hours,
+            "hours_returned": len(entries),
+            "data": {
+                "forecast": entries,
                 "temperature_unit": temp_symbol,
                 "wind_speed_unit": wind_symbol,
             },
