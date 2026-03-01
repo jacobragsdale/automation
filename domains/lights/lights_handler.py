@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from domains.lights.repository import LightsRepository
-from domains.weather.repository import WeatherRepository
+from domains.lights.lights_repository import LightsRepository
+from domains.weather.weather_repository import WeatherRepository
 
 lights_repository = LightsRepository()
 weather_repository = WeatherRepository()

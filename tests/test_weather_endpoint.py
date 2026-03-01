@@ -1,9 +1,9 @@
 import pytest
 from fastapi import HTTPException
 
-from domains.weather import handler as weather_handler
-from domains.weather import controller as weather_controller
-from domains.weather.repository import WeatherRepository
+from domains.weather import weather_handler
+from domains.weather import weather_controller
+from domains.weather.weather_repository import WeatherRepository
 
 
 def _sample_forecast_payload() -> dict:

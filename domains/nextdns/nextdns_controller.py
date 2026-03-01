@@ -3,7 +3,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from domains.nextdns import handler
+from domains.nextdns import nextdns_handler as handler
 
 router = APIRouter(prefix="/nextdns", tags=["NextDNS"])
 

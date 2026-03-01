@@ -1,6 +1,6 @@
 from typing import Any
 
-from domains.weather.repository import WeatherRepository
+from domains.weather.weather_repository import WeatherRepository
 
 weather_repository = WeatherRepository()
 

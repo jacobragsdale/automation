@@ -1,12 +1,14 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 
-from domains.stocks import handler
+from domains.stocks import stocks_handler as handler
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
 
 @router.get("/quote")
-async def get_quote(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+async def get_quote(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
     try:
         return await handler.get_quote(symbol=symbol, force_refresh=force_refresh)
     except ValueError as exc:
@@ -18,7 +20,7 @@ async def get_quote(symbol: str, force_refresh: bool = False) -> dict[str, objec
 
 
 @router.get("/ratios")
-async def get_ratios(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+async def get_ratios(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
     try:
         return await handler.get_ratios(symbol=symbol, force_refresh=force_refresh)
     except ValueError as exc:
@@ -30,7 +32,7 @@ async def get_ratios(symbol: str, force_refresh: bool = False) -> dict[str, obje
 
 
 @router.get("/company")
-async def get_company(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+async def get_company(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
     try:
         return await handler.get_company(symbol=symbol, force_refresh=force_refresh)
     except ValueError as exc:

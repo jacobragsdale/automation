@@ -1,7 +1,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from domains.lights import handler as lights_handler
-from domains.nextdns import handler as nextdns_handler
+from domains.lights import lights_handler
+from domains.nextdns import nextdns_handler
 
 _MORNING_BLOCK_DOMAINS = [
     "reddit.com",

@@ -1,6 +1,6 @@
 from typing import Any
 
-from domains.stocks.repository import StocksRepository
+from domains.stocks.stocks_repository import StocksRepository
 
 stocks_repository = StocksRepository()
 

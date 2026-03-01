@@ -1,6 +1,6 @@
 from typing import Any
 
-from domains.nextdns.repository import NextDnsRepository
+from domains.nextdns.nextdns_repository import NextDnsRepository
 
 nextdns_repository = NextDnsRepository()
 

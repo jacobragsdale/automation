@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from domains.lights import handler as lights_handler
-from domains.lights.controller import router as lights_router
-from domains.nextdns import handler as nextdns_handler
-from domains.nextdns.controller import router as nextdns_router
-from domains.stocks.controller import router as stocks_router
-from domains.system.controller import router as system_router
-from domains.weather.controller import router as weather_router
+from domains.lights import lights_handler
+from domains.lights.lights_controller import router as lights_router
+from domains.nextdns import nextdns_handler
+from domains.nextdns.nextdns_controller import router as nextdns_router
+from domains.stocks.stocks_controller import router as stocks_router
+from domains.system.system_controller import router as system_router
+from domains.weather.weather_controller import router as weather_router
 from schedules import register_schedules
 
 OPENAPI_TAGS = [

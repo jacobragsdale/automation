@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
-from domains.lights import handler
+from domains.lights import lights_handler as handler
 
 router = APIRouter(prefix="/lights", tags=["Lights"])
 

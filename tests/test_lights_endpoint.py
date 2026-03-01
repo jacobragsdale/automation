@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from domains.lights import controller as lights_controller
-from domains.lights import handler as lights_handler
+from domains.lights import lights_controller
+from domains.lights import lights_handler
 
 
 @pytest.mark.asyncio

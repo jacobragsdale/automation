@@ -58,8 +58,9 @@ class NextDnsRepository:
 
             profile_response = await client.get(self.profile_url)
             profile_response.raise_for_status()
-            self.profile = profile_response.json()
-            return self.profile
+            profile: dict[str, Any] = profile_response.json()
+            self.profile = profile
+            return profile
 
     async def ensure_profile_loaded(self, force_refresh: bool = False) -> dict[str, Any]:
         if self._profile_lock is None:

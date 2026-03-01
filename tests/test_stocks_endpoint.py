@@ -1,11 +1,12 @@
 import time
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
 
-from domains.stocks import controller as stocks_controller
-from domains.stocks import handler as stocks_handler
-from domains.stocks.repository import StocksRepository
+from domains.stocks import stocks_controller
+from domains.stocks import stocks_handler
+from domains.stocks.stocks_repository import StocksRepository
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +20,7 @@ def reset_stocks_repository_state(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_quote_endpoint_returns_expected_envelope(monkeypatch):
-    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         assert symbol == "aapl"
         assert force_refresh is False
         return {
@@ -45,7 +46,7 @@ async def test_stocks_quote_endpoint_returns_expected_envelope(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_ratios_endpoint_contains_pe_ratio(monkeypatch):
-    async def fake_get_ratios(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_ratios(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         assert symbol == "MSFT"
         return {
             "action": "stocks_ratios",
@@ -66,7 +67,7 @@ async def test_stocks_ratios_endpoint_contains_pe_ratio(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_company_endpoint_returns_company_fields(monkeypatch):
-    async def fake_get_company(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_company(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         return {
             "action": "stocks_company",
             "status": "ok",
@@ -98,7 +99,7 @@ async def test_stocks_company_endpoint_returns_company_fields(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_unknown_symbol_maps_to_404(monkeypatch):
-    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         raise LookupError("No market data found for symbol 'ZZZZZZ'")
 
     monkeypatch.setattr(stocks_handler, "get_quote", fake_get_quote)
@@ -112,7 +113,7 @@ async def test_stocks_unknown_symbol_maps_to_404(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_empty_symbol_maps_to_400(monkeypatch):
-    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         raise ValueError("Symbol must be provided")
 
     monkeypatch.setattr(stocks_handler, "get_quote", fake_get_quote)
@@ -126,7 +127,7 @@ async def test_stocks_empty_symbol_maps_to_400(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stocks_upstream_failure_maps_to_502(monkeypatch):
-    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, object]:
+    async def fake_get_quote(symbol: str, force_refresh: bool = False) -> dict[str, Any]:
         raise RuntimeError("FMP request failed (500)")
 
     monkeypatch.setattr(stocks_handler, "get_quote", fake_get_quote)

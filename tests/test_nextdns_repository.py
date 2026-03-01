@@ -1,6 +1,6 @@
 import pytest
 
-from domains.nextdns.repository import NextDnsRepository
+from domains.nextdns.nextdns_repository import NextDnsRepository
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Awaitable, Callable
 
-from kasa import Discover
+from kasa import Discover, Module
 from kasa.iot import IotDevice
 
 
@@ -239,8 +239,9 @@ class LightsRepository:
             return
 
         async def _set_color(dev: IotDevice) -> None:
-            await dev.set_hsv(*color_hsv)
-            await dev.set_brightness(brightness)
+            light = dev.modules[Module.Light]
+            await light.set_hsv(*color_hsv)
+            await light.set_brightness(brightness)
             await dev.turn_on()
 
         await self._run_for_devices(devices, _set_color, "Command timed out for")
@@ -257,7 +258,8 @@ class LightsRepository:
             return
 
         async def _set_color_if_on(dev: IotDevice) -> None:
-            await dev.set_hsv(*color_hsv)
-            await dev.set_brightness(brightness)
+            light = dev.modules[Module.Light]
+            await light.set_hsv(*color_hsv)
+            await light.set_brightness(brightness)
 
         await self._run_for_devices(on_devices, _set_color_if_on, "Color command timed out for")

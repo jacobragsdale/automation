@@ -219,7 +219,7 @@ class WeatherRepository:
         weather_code = current.get("weather_code")
         today_high = today_high_values[0] if today_high_values else None
         today_low = today_low_values[0] if today_low_values else None
-        condition = self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions")
+        condition = self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions") if weather_code is not None else "Unknown conditions"
 
         if current_temp is None and today_high is None and today_low is None:
             raise RuntimeError("Weather provider returned incomplete forecast data.")
@@ -287,7 +287,7 @@ class WeatherRepository:
             entries.append(
                 {
                     "date": date_value,
-                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions"),
+                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions") if weather_code is not None else "Unknown conditions",
                     "weather_code": weather_code,
                     "high_temperature": highs[index] if index < len(highs) else None,
                     "low_temperature": lows[index] if index < len(lows) else None,
@@ -367,7 +367,7 @@ class WeatherRepository:
             entries.append(
                 {
                     "time": timestamp.isoformat(timespec="minutes"),
-                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions"),
+                    "condition": self.WEATHER_CODE_MAP.get(weather_code, "Unknown conditions") if weather_code is not None else "Unknown conditions",
                     "weather_code": weather_code,
                     "temperature": temperatures[index] if index < len(temperatures) else None,
                     "feels_like_temperature": (

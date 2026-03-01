@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
-from domains.weather import handler
+from domains.weather import weather_handler as handler
 
 router = APIRouter(tags=["Weather"])
 
