@@ -1,0 +1,9 @@
+services:
+  automation:
+    image: ${IMAGE_REF}
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT}:8000"

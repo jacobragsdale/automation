@@ -9,17 +9,13 @@ from domains.lights import lights_handler
 from domains.lights.lights_controller import router as lights_router
 from domains.nextdns import nextdns_handler
 from domains.nextdns.nextdns_controller import router as nextdns_router
-from domains.stocks.stocks_controller import router as stocks_router
 from domains.system.system_controller import router as system_router
-from domains.weather.weather_controller import router as weather_router
 from schedules import register_schedules
 
-OPENAPI_TAGS = [
+OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "System", "description": "Service health and status endpoints."},
-    {"name": "Weather", "description": "Weather forecast endpoints."},
     {"name": "Lights", "description": "Kasa light control and device endpoints."},
     {"name": "NextDNS", "description": "NextDNS configuration and control endpoints."},
-    {"name": "Stocks", "description": "Public stock quotes and financial metrics."},
 ]
 
 
@@ -48,10 +44,8 @@ app.add_middleware(
 )
 
 app.include_router(system_router)
-app.include_router(weather_router)
 app.include_router(lights_router)
 app.include_router(nextdns_router)
-app.include_router(stocks_router)
 
 
 if __name__ == "__main__":

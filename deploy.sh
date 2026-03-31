@@ -14,7 +14,15 @@ APP_PORT="${APP_PORT:-8000}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}"
 DOCKERFILE_PATH="${PROJECT_ROOT}/Dockerfile"
-ENV_FILE="${PROJECT_ROOT}/.env"
+COMPOSE_FILE="${PROJECT_ROOT}/compose.yml"
+LOCAL_ENV_FILE="${PROJECT_ROOT}/.env"
+TMP_ENV="$(mktemp)"
+
+cleanup() {
+  rm -f "${TMP_ENV}"
+}
+
+trap cleanup EXIT
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -32,32 +40,41 @@ if [[ ! -f "${DOCKERFILE_PATH}" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${COMPOSE_FILE}" ]]; then
+  echo "Missing compose file: ${COMPOSE_FILE}" >&2
+  exit 1
+fi
+
+cat >"${TMP_ENV}" <<EOF
+IMAGE_REF=${IMAGE_REF}
+CONTAINER_NAME=${CONTAINER_NAME}
+APP_PORT=${APP_PORT}
+EOF
+
+if [[ -f "${LOCAL_ENV_FILE}" ]]; then
+  cat "${LOCAL_ENV_FILE}" >>"${TMP_ENV}"
+else
+  echo "No local .env found at ${LOCAL_ENV_FILE}; deploying without app secrets"
+fi
+
 echo "Building ${IMAGE_REF} for ${IMAGE_PLATFORM} locally"
 docker buildx build --platform "${IMAGE_PLATFORM}" --load -t "${IMAGE_REF}" "${PROJECT_ROOT}"
 
 echo "Preparing remote directory ${REMOTE_DIR} on ${REMOTE_HOST}"
 ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_DIR}"
 
-if [[ -f "${ENV_FILE}" ]]; then
-  echo "Uploading environment file"
-  scp "${ENV_FILE}" "${REMOTE_HOST}:${REMOTE_DIR}/.env"
-else
-  echo "No local .env found at ${ENV_FILE}; skipping upload"
-fi
+echo "Uploading compose configuration"
+scp "${COMPOSE_FILE}" "${REMOTE_HOST}:${REMOTE_DIR}/compose.yml"
+scp "${TMP_ENV}" "${REMOTE_HOST}:${REMOTE_DIR}/.env"
 
 echo "Streaming image to remote Docker daemon"
 docker save "${IMAGE_REF}" | ssh "${REMOTE_HOST}" "docker load"
 
-echo "Restarting remote container ${CONTAINER_NAME}"
-ssh "${REMOTE_HOST}" "
-  docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1 || true
-  docker run -d \
-    --name ${CONTAINER_NAME} \
-    --restart unless-stopped \
-    -p ${APP_PORT}:8000 \
-    $(if [[ -f "${ENV_FILE}" ]]; then printf '%s' "--env-file ${REMOTE_DIR}/.env"; fi) \
-    ${IMAGE_REF}
-"
+echo "Removing existing remote container ${CONTAINER_NAME}"
+ssh "${REMOTE_HOST}" "docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1 || true"
+
+echo "Starting stack with docker compose"
+ssh "${REMOTE_HOST}" "cd ${REMOTE_DIR} && docker compose up -d"
 
 echo "Deployment complete"
 echo "Remote app should be available on port ${APP_PORT}"
