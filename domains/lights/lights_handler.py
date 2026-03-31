@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from typing import cast
+
+from apscheduler.job import Job  # pyright: ignore[reportMissingTypeStubs]
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
 
 from domains.lights.lights_repository import LightsRepository
 from domains.weather.weather_repository import WeatherRepository
@@ -88,9 +91,11 @@ async def run_sunset_fade_step(step_index: int, total_steps: int) -> None:
 
 
 async def refresh_sunset_fade_jobs(scheduler: AsyncIOScheduler) -> None:
-    for job in scheduler.get_jobs():
-        if job.id.startswith(SUNSET_FADE_JOB_PREFIX):
-            scheduler.remove_job(job.id)
+    jobs = cast(list[Job], scheduler.get_jobs())  # pyright: ignore[reportUnknownMemberType]
+    for job in jobs:
+        job_id = cast(str, job.id)  # pyright: ignore[reportUnknownMemberType]
+        if job_id.startswith(SUNSET_FADE_JOB_PREFIX):
+            scheduler.remove_job(job_id)  # pyright: ignore[reportUnknownMemberType]
 
     try:
         sunset_payload = await weather_repository.get_sunset(location=SUNSET_FADE_LOCATION)
@@ -121,7 +126,7 @@ async def refresh_sunset_fade_jobs(scheduler: AsyncIOScheduler) -> None:
         if run_at <= now:
             continue
 
-        scheduler.add_job(
+        scheduler.add_job(  # pyright: ignore[reportUnknownMemberType]
             run_sunset_fade_step,
             trigger="date",
             run_date=run_at,

@@ -1,4 +1,4 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
 
 from domains.lights import lights_handler
 from domains.nextdns import nextdns_handler
@@ -35,7 +35,7 @@ async def block_morning_sites() -> None:
 
 
 def register_schedules(scheduler: AsyncIOScheduler) -> None:
-    scheduler.add_job(
+    scheduler.add_job(  # pyright: ignore[reportUnknownMemberType]
         lights_handler.run_night_scene,
         trigger="cron",
         hour=20,
@@ -43,7 +43,7 @@ def register_schedules(scheduler: AsyncIOScheduler) -> None:
         id="lights_night_scene",
         replace_existing=True,
     )
-    scheduler.add_job(
+    scheduler.add_job(  # pyright: ignore[reportUnknownMemberType]
         block_morning_sites,
         trigger="cron",
         hour=6,

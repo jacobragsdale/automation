@@ -1,6 +1,0 @@
-{
-  "typeCheckingMode": "basic",
-  "venvPath": ".",
-  "venv": ".venv",
-  "exclude": ["**/__pycache__", ".venv"]
-}

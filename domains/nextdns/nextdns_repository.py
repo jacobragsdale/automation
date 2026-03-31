@@ -1,7 +1,7 @@
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote_plus
 from uuid import uuid4
 
@@ -28,7 +28,7 @@ class NextDnsRepository:
         self._profile_lock: asyncio.Lock | None = None
         self._focus_lock: asyncio.Lock | None = None
         self._focus_sessions: dict[str, dict[str, Any]] = {}
-        self._focus_tasks: dict[str, asyncio.Task] = {}
+        self._focus_tasks: dict[str, asyncio.Task[Any]] = {}
         self._initialized = True
 
     def _ensure_headers(self) -> dict[str, str]:
@@ -49,11 +49,11 @@ class NextDnsRepository:
             profiles_response = await client.get("https://api.nextdns.io/profiles")
             profiles_response.raise_for_status()
             profiles = profiles_response.json()
-            profile_data = profiles.get("data") or []
+            profile_data: list[Any] = cast(list[Any], profiles.get("data") or [])
             if not profile_data:
                 raise RuntimeError("No NextDNS profiles returned")
 
-            self.profile_id = profile_data[0]["id"]
+            self.profile_id = cast(str, profile_data[0]["id"])
             self.profile_url = f"https://api.nextdns.io/profiles/{self.profile_id}"
 
             profile_response = await client.get(self.profile_url)
@@ -248,7 +248,7 @@ class NextDnsRepository:
         profile = await self.ensure_profile_loaded(force_refresh=True)
         data = profile.get("data", {})
         now = datetime.now(timezone.utc)
-        active_sessions = []
+        active_sessions: list[dict[str, Any]] = []
 
         lock = await self._get_focus_lock()
         async with lock:
@@ -273,7 +273,7 @@ class NextDnsRepository:
             "privacy": data.get("privacy", {}),
             "denylist": data.get("denylist", []),
             "allowlist": data.get("allowlist", []),
-            "focusSessions": sorted(active_sessions, key=lambda item: item["expires_at"]),
+            "focusSessions": sorted(active_sessions, key=lambda item: cast(str, item["expires_at"])),
         }
 
     async def create_focus_session(
@@ -291,7 +291,7 @@ class NextDnsRepository:
         if duration_minutes < 5 or duration_minutes > 1440:
             raise ValueError("duration_minutes must be between 5 and 1440")
 
-        normalized_domains = []
+        normalized_domains: list[str] = []
         for domain in domains or []:
             normalized = self._normalize_domain(domain)
             if normalized:
@@ -347,8 +347,8 @@ class NextDnsRepository:
                 await self._request("PATCH", "/parentalControl", json=parental_payload)
 
             refreshed_profile = await self.ensure_profile_loaded(force_refresh=True)
-            deny_entries = refreshed_profile.get("data", {}).get("denylist", [])
-            current_denylist = {
+            deny_entries: list[dict[str, Any]] = cast(list[dict[str, Any]], refreshed_profile.get("data", {}).get("denylist", []))
+            current_denylist: dict[str, dict[str, Any]] = {
                 self._normalize_domain(entry.get("id", "")): entry
                 for entry in deny_entries
                 if entry.get("id")
@@ -374,7 +374,7 @@ class NextDnsRepository:
         now = datetime.now(timezone.utc)
         session_id = uuid4().hex
         expires_at = now + timedelta(minutes=duration_minutes)
-        session = {
+        session: dict[str, Any] = {
             "id": session_id,
             "status": "active",
             "created_at": now,
@@ -502,5 +502,5 @@ class NextDnsRepository:
         data = profile.get("data", {})
         blocklist = data.get("denylist", [])
         if isinstance(blocklist, list):
-            return blocklist
+            return cast(list[dict[str, Any]], blocklist)
         return []

@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn

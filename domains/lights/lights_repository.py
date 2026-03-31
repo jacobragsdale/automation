@@ -2,10 +2,12 @@ import asyncio
 import json
 from pathlib import Path
 from time import monotonic
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypeVar
 
-from kasa import Discover, Module
+from kasa import Device, Discover, Module
 from kasa.iot import IotDevice
+
+T = TypeVar("T")
 
 
 class LightsRepository:
@@ -54,20 +56,21 @@ class LightsRepository:
     def _stale(self, force_refresh: bool) -> bool:
         return force_refresh or not self.devices or (monotonic() - self._last_discovery) >= self.DISCOVERY_TTL
 
-    async def _with_timeout(self, coro, message: str, *, timeout: int | None = None):
+    async def _with_timeout(self, coro: Awaitable[T], message: str, *, timeout: int | None = None) -> T | None:
         try:
-            return await asyncio.wait_for(coro, timeout=timeout or self.COMMAND_TIMEOUT)
+            result: T = await asyncio.wait_for(coro, timeout=timeout or self.COMMAND_TIMEOUT)  # type: ignore[arg-type]
+            return result
         except Exception as exc:
             print(f"{message}: {exc}")
         return None
 
     async def _probe_ip(self, ip: str) -> tuple[str, IotDevice | None]:
-        device = await self._with_timeout(
-            Discover.discover_single(ip, discovery_timeout=self.DISCOVERY_TIMEOUT, timeout=self.COMMAND_TIMEOUT),
+        device: Device | None = await self._with_timeout(
+            Discover.discover_single(ip, discovery_timeout=self.DISCOVERY_TIMEOUT, timeout=self.COMMAND_TIMEOUT),  # pyright: ignore[reportUnknownMemberType]
             f"Discovery timed out for saved device {ip}",
             timeout=self.COMMAND_TIMEOUT + 1,
         )
-        return ip, device
+        return ip, device if isinstance(device, IotDevice) else None
 
     async def _discover_ips(self, ips: set[str]) -> dict[str, IotDevice]:
         if not ips:
@@ -76,15 +79,17 @@ class LightsRepository:
         return {ip: dev for ip, dev in results if dev is not None}
 
     async def _broadcast_discover(self) -> dict[str, IotDevice]:
-        devices = await self._with_timeout(
-            Discover.discover(
+        raw: dict[str, Device] | None = await self._with_timeout(
+            Discover.discover(  # pyright: ignore[reportUnknownMemberType]
                 discovery_timeout=self.DISCOVERY_TIMEOUT,
                 timeout=self.COMMAND_TIMEOUT,
             ),
             "Broadcast discovery timed out; using cached devices if available.",
             timeout=self.DISCOVERY_TIMEOUT + 1,
         )
-        return devices or {}
+        if not raw:
+            return {}
+        return {host: dev for host, dev in raw.items() if isinstance(dev, IotDevice)}
 
     async def discover_devices(self, force_refresh: bool = False) -> dict[str, IotDevice]:
         if not self._stale(force_refresh):
@@ -109,7 +114,7 @@ class LightsRepository:
             return self.devices
 
     async def _update_device(self, dev: IotDevice) -> None:
-        await self._with_timeout(dev.update(), f"Timeout updating {getattr(dev, 'alias', 'Unknown device')}")
+        await self._with_timeout(dev.update(), f"Timeout updating {getattr(dev, 'alias', 'Unknown device')}")  # pyright: ignore[reportUnknownMemberType]
 
     async def _update_all(self) -> None:
         await asyncio.gather(*(self._update_device(dev) for dev in self.devices.values()))
@@ -121,7 +126,7 @@ class LightsRepository:
         return str(value)
 
     @staticmethod
-    def _safe_call(getter, default: Any = None) -> Any:
+    def _safe_call(getter: Callable[[], Any], default: Any = None) -> Any:
         try:
             return getter()
         except Exception:
@@ -134,17 +139,19 @@ class LightsRepository:
         elif device_type is not None:
             device_type = str(device_type)
 
-        children = self._safe_call(lambda: getattr(device, "children", []), default=[]) or []
+        children: list[Any] = self._safe_call(lambda: getattr(device, "children", []), default=[]) or []
         child_aliases = [
             str(alias)
-            for alias in (self._safe_call(lambda child=child: getattr(child, "alias", None)) for child in children)
+            for alias in (self._safe_call(lambda child=child: getattr(child, "alias", None)) for child in children)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
             if alias
         ]
 
-        location = self._safe_call(lambda: getattr(device, "location", (None, None)), default=(None, None))
-        lat, lon = (None, None)
-        if isinstance(location, (tuple, list)) and len(location) >= 2:
-            lat, lon = location[0], location[1]
+        location: Any = self._safe_call(lambda: getattr(device, "location", (None, None)), default=(None, None))
+        lat: Any = None
+        lon: Any = None
+        if isinstance(location, (tuple, list)) and len(location) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+            lat = location[0]  # pyright: ignore[reportUnknownVariableType]
+            lon = location[1]  # pyright: ignore[reportUnknownVariableType]
 
         return {
             "host": host,
@@ -200,15 +207,14 @@ class LightsRepository:
         command_factory: Callable[[IotDevice], Awaitable[None]],
         timeout_message_prefix: str,
     ) -> None:
-        await asyncio.gather(
-            *(
-                self._with_timeout(
-                    command_factory(dev),
-                    f"{timeout_message_prefix} {getattr(dev, 'alias', 'Unknown device')}",
-                )
-                for dev in devices
+        coros = [
+            self._with_timeout(  # pyright: ignore[reportUnknownMemberType]
+                command_factory(dev),
+                f"{timeout_message_prefix} {getattr(dev, 'alias', 'Unknown device')}",
             )
-        )
+            for dev in devices
+        ]
+        await asyncio.gather(*coros)
 
     async def turn_all_on(self) -> None:
         devices = await self._get_updated_devices()
@@ -217,7 +223,7 @@ class LightsRepository:
             return
 
         async def _turn_on(dev: IotDevice) -> None:
-            await dev.turn_on()
+            await dev.turn_on()  # pyright: ignore[reportUnknownMemberType]
 
         await self._run_for_devices(devices, _turn_on, "Command timed out for")
 
@@ -228,7 +234,7 @@ class LightsRepository:
             return
 
         async def _turn_off(dev: IotDevice) -> None:
-            await dev.turn_off()
+            await dev.turn_off()  # pyright: ignore[reportUnknownMemberType]
 
         await self._run_for_devices(devices, _turn_off, "Command timed out for")
 
@@ -242,7 +248,7 @@ class LightsRepository:
             light = dev.modules[Module.Light]
             await light.set_hsv(*color_hsv)
             await light.set_brightness(brightness)
-            await dev.turn_on()
+            await dev.turn_on()  # pyright: ignore[reportUnknownMemberType]
 
         await self._run_for_devices(devices, _set_color, "Command timed out for")
 

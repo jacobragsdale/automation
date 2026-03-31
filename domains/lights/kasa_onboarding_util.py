@@ -43,14 +43,14 @@ async def _discover_softap_device(preferred_host: str | None = None) -> tuple[st
             continue
         seen.add(host)
         try:
-            dev = await Discover.discover_single(host, discovery_timeout=4, timeout=8)
+            dev = await Discover.discover_single(host, discovery_timeout=4, timeout=8)  # pyright: ignore[reportUnknownMemberType]
         except Exception:
             dev = None
         if dev is not None:
             return host, dev
 
     try:
-        discovered = await Discover.discover(discovery_timeout=4, timeout=8)
+        discovered = await Discover.discover(discovery_timeout=4, timeout=8)  # pyright: ignore[reportUnknownMemberType]
     except Exception:
         discovered = {}
     if discovered:

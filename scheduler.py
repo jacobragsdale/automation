@@ -1,6 +1,6 @@
 import asyncio
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
 
 from schedules import register_schedules
 

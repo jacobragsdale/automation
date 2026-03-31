@@ -49,6 +49,6 @@ async def set_lights_color(payload: ColorRequest) -> dict[str, object]:
 
 
 @router.get("/devices")
-async def get_devices(force_refresh: bool = False) -> dict:
+async def get_devices(force_refresh: bool = False) -> dict[str, object]:
     devices = await handler.get_devices(force_refresh=force_refresh)
     return {"action": "lights_devices", "count": len(devices), "data": devices, "status": "ok"}
