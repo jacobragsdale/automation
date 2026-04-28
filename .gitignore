@@ -1,6 +1,8 @@
 .env
 __pycache__/
+**/__pycache__/
 *.py[cod]
+.pytest_cache/
 domains/lights/devices.json
 domains/lights/devices_inventory.json
 util/manual_provision_result.json

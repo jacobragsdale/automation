@@ -36,8 +36,16 @@ async def set_color(hsv: tuple[int, int, int]) -> None:
     await lights_repository.set_all_color(hsv, hsv[2])
 
 
+async def set_brightness(brightness: int) -> None:
+    await lights_repository.set_all_brightness(brightness)
+
+
 async def get_devices(force_refresh: bool = False) -> list[dict[str, object]]:
     return await lights_repository.get_devices_inventory(force_refresh=force_refresh)
+
+
+async def scan_devices() -> list[dict[str, object]]:
+    return await lights_repository.get_devices_inventory(force_refresh=True)
 
 
 async def refresh_sunset_fade_jobs(scheduler: AsyncIOScheduler) -> None:

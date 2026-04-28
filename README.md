@@ -84,7 +84,10 @@ Weather notes:
 - `POST /lights/power/off` - turn all discovered lights off.
 - `POST /lights/color` - set lights using HSV values.
   - Body example: `{"hsv":[220,100,80]}`
+- `POST /lights/brightness` - set light brightness directly without changing hue/saturation.
+  - Body example: `{"brightness":42}`
 - `GET /lights/devices?force_refresh=<bool>` - return discovered Kasa inventory.
+- `POST /lights/devices/scan` - force a Kasa scan, update the cached device IPs, and return inventory.
 
 ### NextDNS controls
 

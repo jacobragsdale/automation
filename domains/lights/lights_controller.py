@@ -18,6 +18,12 @@ class ColorRequest(BaseModel):
     hsv: tuple[Hue, Saturation, Value]
 
 
+class BrightnessRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    brightness: Value
+
+
 @router.post("/scenes/morning")
 async def run_morning_scene() -> dict[str, str]:
     await handler.run_morning_scene()
@@ -48,7 +54,19 @@ async def set_lights_color(payload: ColorRequest) -> dict[str, object]:
     return {"action": "lights_color", "hsv": list(payload.hsv), "status": "ok"}
 
 
+@router.post("/brightness")
+async def set_lights_brightness(payload: BrightnessRequest) -> dict[str, object]:
+    await handler.set_brightness(payload.brightness)
+    return {"action": "lights_brightness", "brightness": payload.brightness, "status": "ok"}
+
+
 @router.get("/devices")
 async def get_devices(force_refresh: bool = False) -> dict[str, object]:
     devices = await handler.get_devices(force_refresh=force_refresh)
     return {"action": "lights_devices", "count": len(devices), "data": devices, "status": "ok"}
+
+
+@router.post("/devices/scan")
+async def scan_devices() -> dict[str, object]:
+    devices = await handler.scan_devices()
+    return {"action": "lights_devices_scan", "count": len(devices), "data": devices, "status": "ok"}

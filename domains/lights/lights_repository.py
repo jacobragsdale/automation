@@ -8,6 +8,7 @@ from kasa import Device, Discover, Module
 from kasa.iot import IotDevice
 
 T = TypeVar("T")
+DeviceSelector = Callable[[list[IotDevice]], list[IotDevice]]
 
 
 class LightsRepository:
@@ -29,6 +30,7 @@ class LightsRepository:
         self._devices_file_path = Path(__file__).resolve().parent / "devices.json"
         self._inventory_file_path = Path(__file__).resolve().parent / "devices_inventory.json"
         self._discovery_lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task[None]] = set()
         self._last_discovery = 0.0
         self._initialized = True
 
@@ -216,56 +218,125 @@ class LightsRepository:
         ]
         await asyncio.gather(*coros)
 
-    async def turn_all_on(self) -> None:
-        devices = await self._get_updated_devices()
-        if not devices:
-            print("No Kasa devices available to control.")
+    def _track_background_task(self, task: asyncio.Task[None]) -> None:
+        self._background_tasks.add(task)
+        task.add_done_callback(self._finish_background_task)
+
+    def _finish_background_task(self, task: asyncio.Task[None]) -> None:
+        self._background_tasks.discard(task)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            print(f"Background lights refresh failed: {exc}")
+
+    async def _refresh_and_run_for_devices(
+        self,
+        command_factory: Callable[[IotDevice], Awaitable[None]],
+        timeout_message_prefix: str,
+        device_selector: DeviceSelector | None = None,
+        empty_message: str = "No Kasa devices found during background refresh.",
+    ) -> None:
+        refreshed_devices = await self.discover_devices(force_refresh=True)
+        if not refreshed_devices:
+            print(empty_message)
             return
 
+        await self._update_all()
+        devices = list(refreshed_devices.values())
+        if device_selector is not None:
+            devices = device_selector(devices)
+        if not devices:
+            print(empty_message)
+            return
+
+        await self._run_for_devices(
+            devices,
+            command_factory,
+            f"{timeout_message_prefix} after refresh for",
+        )
+
+    def _schedule_refresh_command(
+        self,
+        command_factory: Callable[[IotDevice], Awaitable[None]],
+        timeout_message_prefix: str,
+        device_selector: DeviceSelector | None = None,
+        empty_message: str = "No Kasa devices found during background refresh.",
+    ) -> None:
+        task = asyncio.create_task(
+            self._refresh_and_run_for_devices(
+                command_factory,
+                timeout_message_prefix,
+                device_selector=device_selector,
+                empty_message=empty_message,
+            )
+        )
+        self._track_background_task(task)
+
+    async def _run_for_current_devices_and_refresh(
+        self,
+        command_factory: Callable[[IotDevice], Awaitable[None]],
+        timeout_message_prefix: str,
+        device_selector: DeviceSelector | None = None,
+        empty_message: str = "No Kasa devices available to control.",
+    ) -> None:
+        devices = await self._get_updated_devices()
+        if device_selector is not None:
+            devices = device_selector(devices)
+        if devices:
+            await self._run_for_devices(devices, command_factory, timeout_message_prefix)
+        else:
+            print(empty_message)
+
+        self._schedule_refresh_command(
+            command_factory,
+            timeout_message_prefix,
+            device_selector=device_selector,
+            empty_message=empty_message,
+        )
+
+    async def turn_all_on(self) -> None:
         async def _turn_on(dev: IotDevice) -> None:
             await dev.turn_on()  # pyright: ignore[reportUnknownMemberType]
 
-        await self._run_for_devices(devices, _turn_on, "Command timed out for")
+        await self._run_for_current_devices_and_refresh(_turn_on, "Command timed out for")
 
     async def turn_all_off(self) -> None:
-        devices = await self._get_updated_devices()
-        if not devices:
-            print("No Kasa devices available to control.")
-            return
-
         async def _turn_off(dev: IotDevice) -> None:
             await dev.turn_off()  # pyright: ignore[reportUnknownMemberType]
 
-        await self._run_for_devices(devices, _turn_off, "Command timed out for")
+        await self._run_for_current_devices_and_refresh(_turn_off, "Command timed out for")
 
     async def set_all_color(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        devices = await self._get_updated_devices()
-        if not devices:
-            print("No Kasa devices available to control.")
-            return
-
         async def _set_color(dev: IotDevice) -> None:
             light = dev.modules[Module.Light]
             await light.set_hsv(*color_hsv)
             await light.set_brightness(brightness)
             await dev.turn_on()  # pyright: ignore[reportUnknownMemberType]
 
-        await self._run_for_devices(devices, _set_color, "Command timed out for")
+        await self._run_for_current_devices_and_refresh(_set_color, "Command timed out for")
+
+    async def set_all_brightness(self, brightness: int) -> None:
+        async def _set_brightness(dev: IotDevice) -> None:
+            light = dev.modules[Module.Light]
+            await light.set_brightness(brightness)
+            await dev.turn_on()  # pyright: ignore[reportUnknownMemberType]
+
+        await self._run_for_current_devices_and_refresh(_set_brightness, "Command timed out for")
 
     async def set_color_on_active_lights(self, color_hsv: tuple[int, int, int], brightness: int) -> None:
-        devices = await self._get_updated_devices()
-        if not devices:
-            print("No Kasa devices available to control.")
-            return
-
-        on_devices = [dev for dev in devices if dev.is_on]
-        if not on_devices:
-            print("No lights are currently on; skipping color update.")
-            return
+        def _on_devices(devices: list[IotDevice]) -> list[IotDevice]:
+            return [dev for dev in devices if dev.is_on]
 
         async def _set_color_if_on(dev: IotDevice) -> None:
             light = dev.modules[Module.Light]
             await light.set_hsv(*color_hsv)
             await light.set_brightness(brightness)
 
-        await self._run_for_devices(on_devices, _set_color_if_on, "Color command timed out for")
+        await self._run_for_current_devices_and_refresh(
+            _set_color_if_on,
+            "Color command timed out for",
+            device_selector=_on_devices,
+            empty_message="No lights are currently on; skipping color update.",
+        )
