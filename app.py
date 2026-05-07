@@ -10,7 +10,7 @@ from domains.lights.lights_controller import router as lights_router
 from domains.nextdns import nextdns_handler
 from domains.nextdns.nextdns_controller import router as nextdns_router
 from domains.system.system_controller import router as system_router
-from schedules import register_schedules
+from schedules import SCHEDULER_TIMEZONE, register_schedules
 
 OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "System", "description": "Service health and status endpoints."},
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     await lights_handler.initialize_lights()
     await nextdns_handler.ensure_profile_loaded()
 
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=SCHEDULER_TIMEZONE)
     register_schedules(scheduler)
 
     scheduler.start()

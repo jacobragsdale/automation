@@ -1,5 +1,7 @@
 import asyncio
+from ipaddress import ip_address, ip_network
 import json
+import os
 from pathlib import Path
 from time import monotonic
 from typing import Any, Awaitable, Callable, TypeVar
@@ -16,6 +18,9 @@ class LightsRepository:
     DISCOVERY_TTL = 300
     DISCOVERY_TIMEOUT = 3
     COMMAND_TIMEOUT = 6
+    NETWORK_SCAN_TIMEOUT = 1
+    NETWORK_SCAN_COMMAND_TIMEOUT = 2
+    NETWORK_SCAN_CONCURRENCY = 64
 
     def __new__(cls):
         if cls._instance is None:
@@ -66,19 +71,87 @@ class LightsRepository:
             print(f"{message}: {exc}")
         return None
 
-    async def _probe_ip(self, ip: str) -> tuple[str, IotDevice | None]:
-        device: Device | None = await self._with_timeout(
-            Discover.discover_single(ip, discovery_timeout=self.DISCOVERY_TIMEOUT, timeout=self.COMMAND_TIMEOUT),  # pyright: ignore[reportUnknownMemberType]
-            f"Discovery timed out for saved device {ip}",
-            timeout=self.COMMAND_TIMEOUT + 1,
-        )
+    async def _probe_ip(
+        self,
+        ip: str,
+        *,
+        discovery_timeout: int = DISCOVERY_TIMEOUT,
+        command_timeout: int = COMMAND_TIMEOUT,
+        log_errors: bool = True,
+    ) -> tuple[str, IotDevice | None]:
+        try:
+            device: Device | None = await asyncio.wait_for(
+                Discover.discover_single(ip, discovery_timeout=discovery_timeout, timeout=command_timeout),  # pyright: ignore[reportUnknownMemberType]
+                timeout=command_timeout + 1,
+            )
+        except Exception as exc:
+            if log_errors:
+                print(f"Discovery timed out for saved device {ip}: {exc}")
+            return ip, None
         return ip, device if isinstance(device, IotDevice) else None
 
-    async def _discover_ips(self, ips: set[str]) -> dict[str, IotDevice]:
+    async def _discover_ips(
+        self,
+        ips: set[str],
+        *,
+        discovery_timeout: int = DISCOVERY_TIMEOUT,
+        command_timeout: int = COMMAND_TIMEOUT,
+        log_errors: bool = True,
+        concurrency: int | None = None,
+    ) -> dict[str, IotDevice]:
         if not ips:
             return {}
-        results = await asyncio.gather(*(self._probe_ip(ip) for ip in ips))
+
+        if concurrency is None:
+            results = await asyncio.gather(
+                *(
+                    self._probe_ip(
+                        ip,
+                        discovery_timeout=discovery_timeout,
+                        command_timeout=command_timeout,
+                        log_errors=log_errors,
+                    )
+                    for ip in ips
+                )
+            )
+            return {ip: dev for ip, dev in results if dev is not None}
+
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def _limited_probe(ip: str) -> tuple[str, IotDevice | None]:
+            async with semaphore:
+                return await self._probe_ip(
+                    ip,
+                    discovery_timeout=discovery_timeout,
+                    command_timeout=command_timeout,
+                    log_errors=log_errors,
+                )
+
+        results = await asyncio.gather(*(_limited_probe(ip) for ip in ips))
         return {ip: dev for ip, dev in results if dev is not None}
+
+    def _neighbor_ips(self, seed_ips: set[str]) -> set[str]:
+        candidates: set[str] = set()
+        for seed_ip in seed_ips:
+            try:
+                address = ip_address(seed_ip)
+            except ValueError:
+                continue
+            if address.version != 4:
+                continue
+
+            network = ip_network(f"{address}/24", strict=False)
+            candidates.update(str(host) for host in network.hosts())
+        return candidates - seed_ips
+
+    async def _discover_neighbor_ips(self, seed_ips: set[str]) -> dict[str, IotDevice]:
+        return await self._discover_ips(
+            self._neighbor_ips(seed_ips),
+            discovery_timeout=self.NETWORK_SCAN_TIMEOUT,
+            command_timeout=self.NETWORK_SCAN_COMMAND_TIMEOUT,
+            log_errors=False,
+            concurrency=self.NETWORK_SCAN_CONCURRENCY,
+        )
 
     async def _broadcast_discover(self) -> dict[str, IotDevice]:
         raw: dict[str, Device] | None = await self._with_timeout(
@@ -102,9 +175,11 @@ class LightsRepository:
                 return self.devices
 
             saved_ips = self._load_saved_device_ips()
+            seed_ips = saved_ips | set(self.devices)
             saved_task = asyncio.create_task(self._discover_ips(saved_ips))
+            neighbor_task = asyncio.create_task(self._discover_neighbor_ips(seed_ips))
             broadcast_task = asyncio.create_task(self._broadcast_discover())
-            discovered = {**await saved_task, **await broadcast_task}
+            discovered = {**await saved_task, **await neighbor_task, **await broadcast_task}
 
             if not discovered and self.devices:
                 discovered = self.devices
@@ -134,7 +209,7 @@ class LightsRepository:
         except Exception:
             return default
 
-    def _device_to_inventory(self, host: str, device: IotDevice) -> dict[str, Any]:
+    def _device_to_inventory(self, host: str, device: IotDevice, *, cloud_bound: bool | None = None) -> dict[str, Any]:
         device_type = self._safe_call(lambda: getattr(device, "device_type", None))
         if hasattr(device_type, "value"):
             device_type = getattr(device_type, "value")
@@ -171,17 +246,48 @@ class LightsRepository:
             "latitude": lat,
             "longitude": lon,
             "children": child_aliases,
+            "cloud_bound": cloud_bound,
         }
 
-    async def get_devices_inventory(self, force_refresh: bool = False) -> list[dict[str, Any]]:
+    async def _ensure_cloud_bound(self, device: IotDevice, username: str, password: str) -> bool:
+        cloud = device.modules.get(Module.IotCloud)
+        if cloud is None:
+            return False
+        info = cloud.info
+        if info.provisioned and info.username == username:
+            return True
+        await cloud.call("bind", {"username": username, "password": password})
+        return True
+
+    async def _ensure_all_cloud_bound(self) -> dict[str, bool]:
+        username = os.getenv("KASA_CLOUD_USERNAME")
+        password = os.getenv("KASA_CLOUD_PASSWORD")
+        if not username or not password:
+            print("KASA_CLOUD_USERNAME/KASA_CLOUD_PASSWORD not set; skipping cloud bind.")
+            return {}
+        results: dict[str, bool] = {}
+        for host, dev in self.devices.items():
+            bound = await self._with_timeout(
+                self._ensure_cloud_bound(dev, username, password),
+                f"Cloud bind timed out for {getattr(dev, 'alias', host)}",
+            )
+            results[host] = bool(bound)
+        return results
+
+    async def get_devices_inventory(self, force_refresh: bool = False, bind_to_cloud: bool = False) -> list[dict[str, Any]]:
         devices = await self.discover_devices(force_refresh=force_refresh)
         if not devices:
             self._save_device_inventory([])
             return []
 
         await self._update_all()
+
+        cloud_bound: dict[str, bool] = {}
+        if bind_to_cloud:
+            cloud_bound = await self._ensure_all_cloud_bound()
+
         inventory = [
-            self._device_to_inventory(host, device)
+            self._device_to_inventory(host, device, cloud_bound=cloud_bound.get(host))
             for host, device in sorted(devices.items(), key=lambda item: item[0])
         ]
         self._save_device_inventory(inventory)

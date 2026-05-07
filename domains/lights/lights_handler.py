@@ -45,7 +45,7 @@ async def get_devices(force_refresh: bool = False) -> list[dict[str, object]]:
 
 
 async def scan_devices() -> list[dict[str, object]]:
-    return await lights_repository.get_devices_inventory(force_refresh=True)
+    return await lights_repository.get_devices_inventory(force_refresh=True, bind_to_cloud=True)
 
 
 async def refresh_sunset_fade_jobs(scheduler: AsyncIOScheduler) -> None:

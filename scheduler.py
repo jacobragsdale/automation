@@ -2,11 +2,11 @@ import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
 
-from schedules import register_schedules
+from schedules import SCHEDULER_TIMEZONE, register_schedules
 
 
 async def run_scheduler() -> None:
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=SCHEDULER_TIMEZONE)
     register_schedules(scheduler)
 
     scheduler.start()

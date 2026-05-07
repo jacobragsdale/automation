@@ -1,7 +1,10 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingTypeStubs]
+from zoneinfo import ZoneInfo
 
 from domains.lights import lights_handler
 from domains.nextdns import nextdns_handler
+
+SCHEDULER_TIMEZONE = ZoneInfo("America/Chicago")
 
 _MORNING_BLOCK_DOMAINS = [
     "reddit.com",

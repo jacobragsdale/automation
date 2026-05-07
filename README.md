@@ -26,6 +26,8 @@ Set these in `.env`:
 - `FMP_API_KEY`: required for stocks endpoints (Financial Modeling Prep).
 - `WIFI_SSID`: used by `domains/lights/kasa_onboarding_util.py`.
 - `WIFI_PASSWORD`: used by `domains/lights/kasa_onboarding_util.py`.
+- `KASA_CLOUD_USERNAME`: TP-Link cloud account email; used by `POST /lights/devices/scan` to bind discovered bulbs to the cloud account so they appear in Google Home automatically.
+- `KASA_CLOUD_PASSWORD`: TP-Link cloud account password; paired with `KASA_CLOUD_USERNAME`.
 
 ## Development
 
@@ -49,7 +51,7 @@ uv run scheduler.py
 
 ## Scheduled automations
 
-- `lights_night_scene` runs daily at `8:00 PM` local server time.
+- `lights_night_scene` runs daily at `8:00 PM America/Chicago` time.
 - No morning or sunset-fade jobs are scheduled.
 - The morning scene endpoint remains available for manual runs.
 
